@@ -9,9 +9,6 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-models = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
-destination = Path(sys.argv[2])
-destination.mkdir(parents=True, exist_ok=True)
 W, H = 1600, 1100
 
 def render(model):
@@ -74,8 +71,11 @@ def render(model):
     background.paste(Image.new('RGB',(W,H),(102,116,113)),mask=shadow)
     mesh=Image.fromarray(pixels)
     background.paste(mesh,mask=Image.fromarray((np.isfinite(depth)*255).astype(np.uint8)))
-    background.resize((1000,688),Image.Resampling.LANCZOS).save(destination/f"{model['name']}.png",optimize=True)
+    return background.resize((1000,688),Image.Resampling.LANCZOS)
 
-for model in models:
-    render(model)
-print('Rendered 6 documentation images.')
+if __name__ == '__main__':
+    models = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+    destination = Path(sys.argv[2]);destination.mkdir(parents=True,exist_ok=True)
+    for model in models:
+        render(model).save(destination/f"{model['name']}.png",optimize=True)
+    print(f'Rendered {len(models)} documentation images.')

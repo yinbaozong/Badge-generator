@@ -39,7 +39,8 @@ function numberInRange(value, min, max, label) {
 function readParameters(params) {
   const shape = params.shape ?? 'rect';
   const mode = params.mode ?? 'multi';
-  const magnetEnabled = params.magnetEnabled === true;
+  const backingEnabled = params.backingEnabled !== false;
+  const magnetEnabled = backingEnabled && params.magnetEnabled === true;
   const magnetPoints = params.magnetPoints ?? [[.5, .5]];
   if (!Array.isArray(magnetPoints) || magnetPoints.length > 8 || magnetPoints.some(p =>
       !Array.isArray(p) || p.length !== 2 || p.some(v => !Number.isFinite(v) || v < 0 || v > 1))) {
@@ -55,20 +56,21 @@ function readParameters(params) {
   const values = {
     shape,
     mode,
+    backingEnabled,
     magnetEnabled,
     magnetPoints,
     magnetDiameter: magnetEnabled ? numberInRange(params.magnetDiameter ?? 6, 2, 30, '磁铁直径') : 6,
     magnetThickness: magnetEnabled ? numberInRange(params.magnetThickness ?? 2, 0.5, 10, '磁铁厚度') : 2,
     width: numberInRange(params.width ?? 40, 15, 150, '徽章宽度'),
-    height: shape === 'logo' || shape === 'hexagon' ? 40 : numberInRange(params.height ?? 40, 15, 150, '徽章长度（Y）'),
-    baseThickness: numberInRange(params.baseThickness ?? 3, 1.5, 20, '底座厚度'),
-    cornerRadius: shape === 'logo' ? 0 : numberInRange(params.cornerRadius ?? 3, 0, 15, '圆角'),
-    margin: numberInRange(params.margin ?? 4, 0.5, 20, '图案留边'),
+    height: !backingEnabled || shape === 'logo' || shape === 'hexagon' ? 40 : numberInRange(params.height ?? 40, 15, 150, '徽章长度（Y）'),
+    baseThickness: backingEnabled ? numberInRange(params.baseThickness ?? 3, 1.5, 20, '底座厚度') : 0,
+    cornerRadius: !backingEnabled || shape === 'logo' ? 0 : numberInRange(params.cornerRadius ?? 3, 0, 15, '圆角'),
+    margin: backingEnabled ? numberInRange(params.margin ?? 4, 0.5, 20, '图案留边') : 0,
     reliefHeight: numberInRange(params.reliefHeight ?? 1, 0.2, 20, '图案凸起高度'),
-    puzzleClearance: numberInRange(params.puzzleClearance ?? 0.2, 0.05, 0.6, '拼图间隙'),
+    puzzleClearance: backingEnabled && shape === 'puzzle' ? numberInRange(params.puzzleClearance ?? 0.2, 0.05, 0.6, '拼图间隙') : 0.2,
   };
   if (shape === 'hexagon') values.height = values.width * Math.sqrt(3) / 2;
-  if (shape === 'puzzle' && Math.min(values.width, values.height) < 25) {
+  if (backingEnabled && shape === 'puzzle' && Math.min(values.width, values.height) < 25) {
     throw new Error('拼图徽章的宽度和高度都至少需要 25 毫米。');
   }
   return values;
@@ -233,6 +235,33 @@ export async function buildBadge(artwork, params = {}) {
       }
     }
 
+    if (!options.backingEnabled) {
+      const box = unionSections(colorRegions.map(({section})=>section)).bounds();
+      const span = box.max[0]-box.min[0];
+      if (span<=0) throw new Error('SVG 图案的宽度或高度为零。');
+      const center = [(box.min[0]+box.max[0])/2,(box.min[1]+box.max[1])/2];
+      const regions = colorRegions.map(({color,section})=>({color,section:keep(keep(section.translate(center.map(v=>-v))).scale(options.width/span))}));
+      const solids = regions.map(({color,section},index)=>({
+        color,name:options.mode==='single'?'黑色图案':`图案 ${index+1} ${color}`,
+        solid:keep(section.extrude(options.reliefHeight+(options.mode==='multi'?index*COLOR_STEP:0))),
+      }));
+      const merged = keep(Manifold.union(solids.map(({solid})=>solid)));
+      const parts = solids.map(({color,name,solid})=>({color,name,mesh:copyMesh(solid,name)}));
+      const triangleCount = parts.reduce((sum,p)=>sum+p.mesh.triangles.length/3,0);
+      if(triangleCount>MAX_TRIANGLES) throw new Error('模型超过一百万个三角面，请简化 SVG 路径。');
+      const mergedMesh=copyMesh(merged,'完整徽章'), meshBox=merged.boundingBox();
+      const bounds={min:[...meshBox.min],max:[...meshBox.max]};
+      warnings.push('仅 Logo 模式不包含底壳和磁铁槽；分离的图案会作为独立部分导出。');
+      return {parts,mergedMesh,bounds,warnings:[...new Set(warnings)],
+        regionsForScad:regions.map(({color,section})=>({color,contours:section.toPolygons()})),
+        stats:{backingEnabled:false,colorCount:regions.length,partCount:parts.length,triangleCount,
+          mergedTriangleCount:mergedMesh.triangles.length/3,sourceShapes:artwork.shapes.length,
+          baseThickness:0,reliefHeight:options.reliefHeight,
+          reliefHeightMax:options.reliefHeight+(options.mode==='multi'?(regions.length-1)*COLOR_STEP:0),
+          magnets:{count:0,diameter:0,depth:0,positions:[]},
+          dimensions:bounds.max.map((v,i)=>v-bounds.min[i])}};
+    }
+
     const jointScale = Math.min(options.width, options.height) / 40;
     const neck = 3 * jointScale;
     const headRadius = 2.5 * jointScale;
@@ -241,9 +270,7 @@ export async function buildBadge(artwork, params = {}) {
     const effectiveMargin = options.shape === 'puzzle'
       ? Math.max(options.margin, puzzleDepth + options.puzzleClearance + 1)
       : options.margin;
-    const fitBox = options.shape === 'hexagon'
-      ? [options.width * 0.72 - 2 * options.margin, options.height * 0.85 - 2 * options.margin]
-      : [options.width - 2 * effectiveMargin, options.height - 2 * effectiveMargin];
+    const fitBox = [options.width - 2 * effectiveMargin, options.height - 2 * effectiveMargin];
     if (fitBox[0] < 5 || (options.shape !== 'logo' && fitBox[1] < 5)) {
       throw new Error('图案留边太大，图案已经放不下：请减小留边或增大徽章。');
     }
@@ -292,11 +319,11 @@ export async function buildBadge(artwork, params = {}) {
       pieces.forEach(keep);
       if (pieces.length > 1) warnings.push('Logo 轮廓包含分离的底座区域；如需连成一体，请增大留边或改用矩形外形。');
     }
+    const sourceColorRegions = colorRegions;
     colorRegions = colorRegions.map(({ color, section }) => ({
       color,
       section: keep(keep(section.translate([-center[0], -center[1]])).scale(scale)),
     }));
-    const fittedArtwork = unionSections(colorRegions.map(({ section }) => section));
     const safeRadius = Math.min(options.cornerRadius, Math.min(options.width, options.height) / 4);
 
     let outline;
@@ -330,6 +357,22 @@ export async function buildBadge(artwork, params = {}) {
     }
     if (outline.isEmpty() || outline.area() <= AREA_EPSILON) {
       throw new Error('徽章底座外形为空，请减小圆角或调整徽章尺寸。');
+    }
+
+    if (options.shape==='hexagon') {
+      // Fit the actual artwork into the actual inset hexagon. A fixed 72% box
+      // left a wide border even when the requested clearance was only 1 mm.
+      const inner = keep(outline.offset(-options.margin,'Round',2,SEGMENTS));
+      if(inner.isEmpty()) throw new Error('图案留边太大，图案已经放不下：请减小留边或增大徽章。');
+      const box=inner.bounds();
+      const raw=keep(unionSections(sourceColorRegions.map(({section})=>section)).translate(center.map(v=>-v)));
+      let low=0,high=Math.min((box.max[0]-box.min[0])/spanX,(box.max[1]-box.min[1])/spanY);
+      for(let i=0;i<28;i++){
+        const candidate=(low+high)/2;
+        const outside=keep(keep(raw.scale(candidate)).subtract(inner));
+        if(outside.area()<=AREA_EPSILON) low=candidate; else high=candidate;
+      }
+      colorRegions=sourceColorRegions.map(({color,section})=>({color,section:keep(keep(section.translate(center.map(v=>-v))).scale(low))}));
     }
 
     colorRegions = colorRegions.map(({ color, section }) => ({ color, section: keep(section.intersect(outline)) }))
@@ -398,6 +441,7 @@ export async function buildBadge(artwork, params = {}) {
       regionsForScad,
       warnings: [...new Set(warnings)],
       stats: {
+        backingEnabled: true,
         colorCount: colorRegions.length,
         partCount: parts.length,
         triangleCount,

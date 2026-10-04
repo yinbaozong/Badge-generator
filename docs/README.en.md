@@ -6,7 +6,9 @@
 
 Upload artwork, set the dimensions, and download a printable badge. SVG is the preferred format; PNG and JPG tracing is also available as an experimental feature. Files are processed in your browser and are not uploaded.
 
-![Multicolor badge](images/multicolor.png)
+![Eight logos in three badge shapes](images/brand-showcase.png)
+
+Eight local SVGs, rendered as rectangles, hexagons and logo outlines: 24 generated examples. These are mesh renders, not brand partnerships or print certifications.
 
 ## Making your first badge
 
@@ -51,6 +53,14 @@ A logo outline can produce separate backing islands. Increase the border or choo
 
 The lower-right readout shows the finished dimensions, including total height. Changing width does not scale thickness. Invalid settings show an error above the preview. The previous valid preview may remain visible, but downloads stay disabled until the error is resolved.
 
+Hexagon fitting uses the real inset outline. The border is a minimum clearance: equal spacing at every point is not possible for every logo shape.
+
+## Exporting only the logo
+
+In **Dimensions**, enable **Logo only, no backing**. Preview and STL / 3MF / SCAD exports will contain only the artwork. Width refers to the logo itself; logo thickness sets its height. Backing shape, border and magnet pockets are disabled.
+
+Disconnected letters, dots and other regions remain separate pieces without a backing to connect them.
+
 ## Magnet pockets
 
 ![Two pockets on the back](images/magnets.png)
@@ -61,7 +71,7 @@ Pocket diameter includes 0.3 mm clearance; depth includes 0.1 mm. Pockets need 0
 
 ## Reusing settings
 
-**Export settings** and **Import settings** are at the top of the left panel. Templates save dimensions, shape, color mode and magnet positions, but not artwork files. Positions scale with the backing. Check them when applying a template to a different logo.
+**Export settings** and **Import settings** are in the lower-left corner. Templates save dimensions, shape, color mode, backing choice and magnet positions, but not artwork files. Positions scale with the backing. Check them when applying a template to a different logo.
 
 ## PNG / JPG tracing
 
@@ -70,6 +80,14 @@ Best results come from clear icons with transparent or solid backgrounds. Photos
 Small images and screenshots may still show rough edges when enlarged. Smoothing cannot recover missing source detail. Use an original SVG where possible, or try [PNG to SVG](https://pngtosvg.com/) and upload the result. This is an external tool; this project does not send it your files.
 
 For SVGs, use closed filled paths. Convert text and strokes to paths first. Masks, filters and embedded images are not supported.
+
+## Finding SVG artwork
+
+- [theSVG](https://thesvg.org/) for brand logos.
+- [SVGL](https://svgl.app/) for software, developer tools and AI brand logos.
+- [Simple Icons](https://simpleicons.org/) for monochrome brand icons.
+
+Download an SVG, then use **Upload SVG**. Some files may need text, strokes or masks converted to plain filled paths. Follow the applicable brand rules; this project's MIT license does not license third-party brand marks.
 
 ## Feedback and sharing
 

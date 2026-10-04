@@ -16,7 +16,7 @@ const numericFields = Object.keys(defaults);
 let artwork = null, result = null, filename = '示例徽章', mode = 'multi';
 let requestId = 0, uploadId = 0, timer = null, thumbnailUrl = null, needsCameraReset = true;
 let viewer = null;
-let previousShape = 'rect', standardHeight = defaults.height;
+let previousShape = 'rect', previousLogoOnly = false, standardHeight = defaults.height;
 let rasterFile = null;
 let magnetPoints = [[.5, .5]], magnetEditing = false, lastGoodResult = null;
 function selectPanel(name) {
@@ -51,7 +51,7 @@ function validateFields() {
     const input = $(field), error = fieldErrors.get(field);
     const ignored = input.disabled || (field==='cornerRadius' && $('shape').value==='logo') ||
       (field==='puzzleClearance' && $('shape').value!=='puzzle') ||
-      (field.startsWith('magnet') && !$('magnetEnabled').checked);
+      (field.startsWith('magnet') && (!$('magnetEnabled').checked || $('logoOnly').checked));
     const invalid = !ignored && (!Number.isFinite(input.valueAsNumber) || input.valueAsNumber < Number(input.min) || input.valueAsNumber > Number(input.max));
     input.setAttribute('aria-invalid', String(invalid)); error.hidden = !invalid;
     if (invalid) {
@@ -64,17 +64,22 @@ function validateFields() {
   return firstError;
 }
 function syncShapeControls() {
+  const logoOnly = $('logoOnly').checked;
   const logo = $('shape').value === 'logo', hexagon = $('shape').value === 'hexagon';
-  const autoLength = logo || hexagon, wasAuto = ['logo', 'hexagon'].includes(previousShape);
+  const autoLength = logoOnly || logo || hexagon, wasAuto = previousLogoOnly || ['logo', 'hexagon'].includes(previousShape);
   if (autoLength && !wasAuto) standardHeight = $('height').value;
   if (!autoLength && wasAuto) $('height').value = standardHeight;
   $('height').readOnly = autoLength; $('height').disabled = autoLength;
   $('height-label').textContent = autoLength ? '长度（Y，自动）' : '长度（Y）';
-  $('corner-field').hidden = logo; $('logo-size-note').hidden = !logo;
-  $('hex-size-note').hidden = !hexagon;
-  $('puzzle-field').hidden = $('shape').value !== 'puzzle';
-  $('magnet-fields').hidden = !$('magnetEnabled').checked;
+  $('corner-field').hidden = logoOnly || logo; $('logo-size-note').hidden = logoOnly || !logo;
+  $('hex-size-note').hidden = logoOnly || !hexagon;
+  $('logo-only-note').hidden = !logoOnly;
+  for (const field of ['shape','baseThickness','cornerRadius','margin','magnetEnabled','puzzleClearance']) $(field).disabled = logoOnly;
+  $('puzzle-field').hidden = logoOnly || $('shape').value !== 'puzzle';
+  $('magnet-fields').hidden = logoOnly || !$('magnetEnabled').checked;
+  $('no-magnet-note').hidden = !logoOnly;
   previousShape = $('shape').value;
+  previousLogoOnly = logoOnly;
 }
 const viewerWarnings = [];
 try { viewer = createViewer($('viewport')); viewer.start(); }
@@ -92,7 +97,7 @@ function feedback(messages, error = false) {
 function setExportEnabled(enabled) {
   for (const button of exportButtons) button.disabled = !enabled;
   $('view-back-button').disabled = !viewer || !lastGoodResult;
-  $('place-magnets').disabled = !viewer || !artwork;
+  $('place-magnets').disabled = !viewer || !artwork || $('logoOnly').checked;
 }
 function clearPreview(message = '上传一张 SVG，从平面开始。') {
   try { viewer?.clear(); } catch { /* Downloads remain independent of rendering. */ }
@@ -113,7 +118,7 @@ function beginUpload() {
   return token;
 }
 function parameters() {
-  const values = { shape: $('shape').value, mode, magnetEnabled: $('magnetEnabled').checked, magnetPoints: magnetPoints.map(p=>[...p]) };
+  const values = { shape: $('shape').value, mode, backingEnabled:!$('logoOnly').checked, magnetEnabled: $('magnetEnabled').checked, magnetPoints: magnetPoints.map(p=>[...p]) };
   for (const field of numericFields) values[field] = $('' + field).value === '' ? NaN : Number($(field).value);
   return values;
 }
@@ -128,7 +133,7 @@ function generate() {
   feedback(viewerWarnings);
   const fieldError = validateFields();
   if (fieldError) { status('error', '需要调整'); feedback([fieldError], true); $('export-summary').textContent='调整后重新生成'; return; }
-  $('puzzle-field').hidden = $('shape').value !== 'puzzle';
+  $('puzzle-field').hidden = $('logoOnly').checked || $('shape').value !== 'puzzle';
   const { shapes, warnings, silhouette } = artwork;
   const params = parameters(); if (magnetEditing) params.magnetEnabled = false;
   worker.postMessage({ id: requestId, artwork: { shapes, warnings, silhouette }, params });
@@ -167,7 +172,8 @@ worker.onmessage = ({ data }) => {
   const reliefRange = result.stats.reliefHeightMax > result.stats.reliefHeight
     ? `${result.stats.reliefHeight.toFixed(1)}–${result.stats.reliefHeightMax.toFixed(1)}` : result.stats.reliefHeight.toFixed(1);
   $('model-dimensions').textContent = `X ${x.toFixed(1)} × Y ${y.toFixed(1)} × Z ${z.toFixed(1)} mm\n底壳 ${result.stats.baseThickness.toFixed(1)} mm · Logo ${reliefRange} mm`;
-  if (['logo', 'hexagon'].includes($('shape').value)) $('height').value = y.toFixed(1);
+  if (!result.stats.backingEnabled) $('model-dimensions').textContent = `X ${x.toFixed(1)} × Y ${y.toFixed(1)} × Z ${z.toFixed(1)} mm\nLogo ${reliefRange} mm · 无底壳`;
+  if ($('logoOnly').checked || ['logo', 'hexagon'].includes($('shape').value)) $('height').value = y.toFixed(1);
   $('export-summary').textContent = `${result.stats.colorCount} 个图案色区 · ${result.stats.partCount} 个部件`;
   if (magnetEditing) $('export-summary').textContent = '选点完成后生成磁铁槽';
   $('export-detail').textContent = `${result.stats.mergedTriangleCount.toLocaleString()} 个三角面 · 已生成完整模型`;
@@ -269,7 +275,8 @@ $('svg-file').addEventListener('change', async event => {
 for (const event of ['dragenter', 'dragover']) $('drop-zone').addEventListener(event, e => { e.preventDefault(); $('drop-zone').classList.add('dragging'); });
 for (const event of ['dragleave', 'drop']) $('drop-zone').addEventListener(event, e => { e.preventDefault(); $('drop-zone').classList.remove('dragging'); });
 $('drop-zone').addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
-for (const field of [...numericFields, 'shape', 'magnetEnabled']) $(field).addEventListener('input', schedule);
+for (const field of [...numericFields, 'shape', 'magnetEnabled','logoOnly']) $(field).addEventListener('input', schedule);
+$('logoOnly').addEventListener('change',()=>{if($('logoOnly').checked)stopMagnetPicking();generate();});
 function setMode(selectedMode) {
   mode = selectedMode;
   for (const button of document.querySelectorAll('.mode-button')) {
@@ -309,7 +316,7 @@ function stopMagnetPicking() {
   for (const id of ['fit-button','top-button','back-button']) $(id).disabled = false;
 }
 function startMagnetPicking() {
-  if (!viewer || !artwork) return;
+  if (!viewer || !artwork || $('logoOnly').checked) return;
   if (magnetPoints.length===1 && magnetPoints[0][0]===.5 && magnetPoints[0][1]===.5 && !lastGoodResult?.stats.magnets?.count) magnetPoints=[];
   $('magnetEnabled').checked = true; syncShapeControls(); selectPanel('magnets');
   magnetEditing = true; $('placement-banner').hidden = false;
@@ -348,7 +355,7 @@ $('example-button').addEventListener('click', loadExample);
 async function download(kind) {
   if (!result) return;
   const snapshot = result, savedName = filename;
-  const exportParts = isEnglish() ? snapshot.parts.map((part, i) => ({ ...part, name: i === 0 ? 'White backing' : `Artwork ${i} ${part.color}` })) : snapshot.parts;
+  const exportParts = isEnglish() ? snapshot.parts.map((part, i) => ({ ...part, name: i === 0 && snapshot.stats.backingEnabled ? 'White backing' : `Artwork ${i+(snapshot.stats.backingEnabled?0:1)} ${part.color}` })) : snapshot.parts;
   const suffix = isEnglish() ? 'badge' : '徽章';
   setExportEnabled(false); status('loading', '准备下载');
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -369,7 +376,7 @@ function configNotice(message, error = false) {
 $('export-config').addEventListener('click', () => {
   try {
     const settings = parameters();
-    if (['logo', 'hexagon'].includes(settings.shape)) settings.height = Number(standardHeight);
+    if (!settings.backingEnabled || ['logo', 'hexagon'].includes(settings.shape)) settings.height = Number(standardHeight);
     downloadFile(new TextEncoder().encode(serializeSettings(settings)), 'badge-settings.json', 'application/json');
     configNotice('配置已导出，可用于后续徽章。');
   } catch (error) { configNotice(error.message, true); }
@@ -385,6 +392,7 @@ $('config-file').addEventListener('change', async event => {
     for (const field of numericFields) $(field).value = settings[field];
     $('shape').value = settings.shape; previousShape = settings.shape; standardHeight = settings.height;
     $('magnetEnabled').checked = settings.magnetEnabled; setMode(settings.mode);
+    $('logoOnly').checked = !settings.backingEnabled; previousLogoOnly = $('logoOnly').checked;
     stopMagnetPicking(); magnetPoints = settings.magnetPoints; renderMagnetPoints();
     needsCameraReset = true; syncShapeControls(); schedule();
     configNotice('配置已导入，当前图案将使用这套设置。');

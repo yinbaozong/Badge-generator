@@ -15,7 +15,6 @@
   </header>
   <main class="workspace">
     <aside class="inspector" aria-label="徽章设置">
-      <section class="template-toolbar" aria-label="配置模板"><div class="template-actions"><button id="import-config" class="secondary-button" type="button">导入配置</button><button id="export-config" class="secondary-button" type="button">导出配置</button></div><input id="config-file" type="file" accept=".json,application/json" hidden /><p class="field-note">保存参数，下次导入复用；不包含图案。</p><p class="field-note" id="config-notice" role="status" hidden></p></section>
       <nav class="settings-tabs" role="tablist" aria-orientation="vertical" aria-label="设置分组"><button id="tab-artwork" type="button" role="tab" aria-selected="true" aria-controls="panel-artwork" data-panel="artwork">图案</button><button id="tab-dimensions" type="button" role="tab" aria-selected="false" aria-controls="panel-dimensions" data-panel="dimensions">尺寸</button><button id="tab-magnets" type="button" role="tab" aria-selected="false" aria-controls="panel-magnets" data-panel="magnets">磁铁</button></nav>
       <div class="settings-scroll">
       <section class="upload-section" id="panel-artwork" data-settings-panel="artwork" role="tabpanel" aria-labelledby="tab-artwork">
@@ -45,6 +44,8 @@
       </section>
       <section class="control-section" id="panel-dimensions" data-settings-panel="dimensions" role="tabpanel" aria-labelledby="tab-dimensions" hidden>
         <div class="section-heading"><h2>徽章外形</h2><span class="unit-label">毫米</span></div>
+        <label class="magnet-toggle logo-only-toggle"><input id="logoOnly" type="checkbox" />仅 Logo，不带底壳</label>
+        <p id="logo-only-note" class="field-note" hidden>宽度按 Logo 本身计算，XY 等比缩放；不生成磁铁槽。</p>
         <label class="field full">外形<select id="shape"><option value="rect">圆角矩形</option><option value="hexagon">正六边形</option><option value="puzzle">拼图</option><option value="logo">Logo 外形</option></select></label>
         <div class="field-row">
           <label class="field">宽度（X）<input id="width" type="number" value="40" min="15" max="150" step="1" /></label>
@@ -68,6 +69,7 @@
       <section class="control-section" id="panel-magnets" data-settings-panel="magnets" role="tabpanel" aria-labelledby="tab-magnets" hidden>
         <div class="section-heading"><h2>背面磁铁槽</h2></div>
         <label class="magnet-toggle"><input id="magnetEnabled" type="checkbox" />启用磁铁槽</label>
+        <p class="field-note" id="no-magnet-note" hidden>仅 Logo 模式不支持磁铁槽。</p>
         <div id="magnet-fields" hidden><div class="field-row"><label class="field">磁铁直径<input id="magnetDiameter" type="number" value="6" min="2" max="30" step="0.1" /></label><label class="field">磁铁厚度<input id="magnetThickness" type="number" value="2" min="0.5" max="10" step="0.1" /></label></div><p class="field-note">自动预留：直径 +0.3 mm，深度 +0.1 mm。</p>
           <button id="place-magnets" class="primary-button" type="button">在背面选点</button>
           <p class="field-note">点击底壳添加位置，最多 8 个；每个位置可删除重选。</p>
@@ -78,6 +80,7 @@
         <button class="text-button" id="view-back-button" type="button" disabled>查看背面磁铁槽</button>
       </section>
       </div>
+      <section class="template-toolbar" aria-label="配置模板"><div class="template-actions"><button id="import-config" class="secondary-button" type="button">导入配置</button><button id="export-config" class="secondary-button" type="button">导出配置</button></div><input id="config-file" type="file" accept=".json,application/json" hidden /><p class="field-note">保存参数，下次导入复用；不包含图案。</p><p class="field-note" id="config-notice" role="status" hidden></p></section>
       <div class="inspector-foot"><button id="reset-button" class="text-button" type="button">重置尺寸</button><span>尺寸变化后自动生成</span></div>
     </aside>
     <section class="preview-panel" aria-label="三维模型预览">

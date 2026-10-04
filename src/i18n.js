@@ -1,4 +1,8 @@
 const translations = {
+  '仅 Logo，不带底壳': 'Logo only, no backing',
+  '宽度按 Logo 本身计算，XY 等比缩放；不生成磁铁槽。': 'Width refers to the logo itself. XY proportions are preserved; no magnet pockets are generated.',
+  '仅 Logo 模式不支持磁铁槽。': 'Magnet pockets are unavailable without a backing.',
+  '仅 Logo 模式不包含底壳和磁铁槽；分离的图案会作为独立部分导出。': 'Logo-only mode has no backing or magnet pockets. Disconnected artwork exports as separate pieces.',
   '保存参数，下次导入复用；不包含图案。': 'Save settings to reuse later. Artwork is not included.',
   '设置分组': 'Settings sections', '尺寸': 'Dimensions', '磁铁': 'Magnets',
   '启用磁铁槽': 'Enable magnet pockets', '在背面选点': 'Place magnets on back',
@@ -163,6 +167,7 @@ export function translate(text) {
     let translated = translations[source];
     if (translated === undefined) {
       const rules = [
+        [/^Logo ([\d.–]+) mm · 无底壳$/, (_,h) => 'Logo '+h+' mm · No backing'],
         [/^(\d+) 号磁铁位置$/, (_, n) => 'Magnet position ' + n],
         [/^(\d+) 号与 (\d+) 号磁铁槽太近，请重新选点。$/, (_, a, b) => 'Magnet pockets ' + a + ' and ' + b + ' are too close. Place them farther apart.'],
         [/^(\d+) 号磁铁槽超出底壳或距离边缘不足 0.5 mm，请重新选点或减小直径。$/, (_, n) => 'Magnet pocket ' + n + ' needs 0.5 mm clearance from the backing edge. Choose a new position or smaller diameter.'],

@@ -13,7 +13,8 @@ export function validateSettings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) invalid();
   if (!['rect', 'hexagon', 'puzzle', 'logo'].includes(input.shape) ||
       !['single', 'multi'].includes(input.mode) || typeof input.magnetEnabled !== 'boolean') invalid();
-  const settings = { shape: input.shape, mode: input.mode, magnetEnabled: input.magnetEnabled };
+  if (input.backingEnabled !== undefined && typeof input.backingEnabled !== 'boolean') invalid();
+  const settings = { shape: input.shape, mode: input.mode, magnetEnabled: input.magnetEnabled, backingEnabled:input.backingEnabled!==false };
   for (const [key, [min, max]] of Object.entries(ranges)) {
     const value = input[key];
     if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) invalid();
@@ -23,16 +24,16 @@ export function validateSettings(input) {
   if (!Array.isArray(points) || points.length > 8 || points.some(p =>
       !Array.isArray(p) || p.length !== 2 || p.some(v => typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1))) invalid();
   settings.magnetPoints = points.map(p => [...p]);
-  if (settings.shape === 'puzzle' && Math.min(settings.width, settings.height) < 25) invalid();
+  if (settings.backingEnabled && settings.shape === 'puzzle' && Math.min(settings.width, settings.height) < 25) invalid();
   return settings;
 }
 export function serializeSettings(input) {
-  return JSON.stringify({ format: 'svg-badge-settings', version: 2, settings: validateSettings(input) }, null, 2);
+  return JSON.stringify({ format: 'svg-badge-settings', version: 3, settings: validateSettings(input) }, null, 2);
 }
 export function parseSettings(text) {
   let file;
   try { file = JSON.parse(text); } catch { throw new Error('配置文件无效，请使用本工具导出的 JSON 文件。'); }
   if (!file || file.format !== 'svg-badge-settings') throw new Error('配置文件无效，请使用本工具导出的 JSON 文件。');
-  if (![1, 2].includes(file.version)) throw new Error('配置文件版本不支持。');
+  if (![1, 2, 3].includes(file.version)) throw new Error('配置文件版本不支持。');
   return validateSettings(file.settings);
 }
