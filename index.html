@@ -15,7 +15,9 @@
   </header>
   <main class="workspace">
     <aside class="inspector" aria-label="徽章设置">
-      <section class="upload-section">
+      <nav class="settings-tabs" role="tablist" aria-label="设置分组"><button id="tab-artwork" type="button" role="tab" aria-selected="true" aria-controls="panel-artwork" data-panel="artwork">图案</button><button id="tab-dimensions" type="button" role="tab" aria-selected="false" aria-controls="panel-dimensions" data-panel="dimensions">尺寸</button><button id="tab-magnets" type="button" role="tab" aria-selected="false" aria-controls="panel-magnets" data-panel="magnets">磁铁</button></nav>
+      <div class="settings-scroll">
+      <section class="upload-section" id="panel-artwork" data-settings-panel="artwork" role="tabpanel" aria-labelledby="tab-artwork">
         <div class="section-heading"><h2>图案</h2><button class="text-button" id="example-button" type="button">使用示例</button></div>
         <label class="upload-zone" id="drop-zone">
           <input type="file" id="svg-file" accept=".svg,image/svg+xml" />
@@ -40,7 +42,7 @@
         <p class="field-note" id="mode-note">保留实色，色块相差 0.2 毫米，便于上色。</p>
         <div id="palette" class="palette" aria-label="模型颜色"></div>
       </section>
-      <section class="control-section">
+      <section class="control-section" id="panel-dimensions" data-settings-panel="dimensions" role="tabpanel" aria-labelledby="tab-dimensions" hidden>
         <div class="section-heading"><h2>徽章外形</h2><span class="unit-label">毫米</span></div>
         <label class="field full">外形<select id="shape"><option value="rect">圆角矩形</option><option value="hexagon">正六边形</option><option value="puzzle">拼图</option><option value="logo">Logo 外形</option></select></label>
         <div class="field-row">
@@ -48,40 +50,47 @@
           <label class="field"><span id="height-label">长度（Y）</span><input id="height" type="number" value="40" min="15" max="150" step="1" /></label>
         </div>
         <div class="field-row">
-          <label class="field">底壳厚度（Z）<input id="baseThickness" type="number" value="3" min="1.5" max="8" step="0.1" /></label>
+          <label class="field">底壳厚度（Z）<input id="baseThickness" type="number" value="3" min="1.5" max="20" step="0.1" /></label>
           <label class="field" id="corner-field">圆角<input id="cornerRadius" type="number" value="3" min="0" max="15" step="0.5" /></label>
         </div>
         <p class="field-note" id="logo-size-note" hidden>Logo 外形保持原图 XY 比例，长度自动计算；边缘添加少量圆角。</p>
         <p class="field-note" id="hex-size-note" hidden>六条边等长，长度自动计算；圆角对六个顶点均匀生效。</p>
       </section>
-      <section class="control-section">
+      <section class="control-section" data-settings-panel="dimensions" hidden>
         <div class="section-heading"><h2>图案厚度与留边</h2></div>
         <div class="field-row">
           <label class="field">留边<input id="margin" type="number" value="4" min="0.5" max="20" step="0.5" /></label>
-          <label class="field">Logo 厚度（Z）<input id="reliefHeight" type="number" value="1" min="0.2" max="5" step="0.1" /></label>
+          <label class="field">Logo 厚度（Z）<input id="reliefHeight" type="number" value="1" min="0.2" max="20" step="0.1" /></label>
         </div>
-      </section>
-      <section class="control-section">
-        <div class="section-heading"><h2>背面磁铁槽</h2></div>
-        <label class="magnet-toggle"><input id="magnetEnabled" type="checkbox" />启用中心磁铁槽</label>
-        <div id="magnet-fields" hidden><div class="field-row"><label class="field">磁铁直径<input id="magnetDiameter" type="number" value="6" min="2" max="30" step="0.1" /></label><label class="field">磁铁厚度<input id="magnetThickness" type="number" value="2" min="0.5" max="10" step="0.1" /></label></div><p class="field-note">自动预留：直径 +0.3 mm，深度 +0.1 mm。</p></div>
-        <p class="field-note" id="magnet-note" hidden></p>
-        <button class="text-button" id="view-back-button" type="button" disabled>查看背面磁铁槽</button>
         <label class="field full" id="puzzle-field" hidden>拼图间隙<input id="puzzleClearance" type="number" value="0.2" min="0.05" max="0.6" step="0.05" /></label>
       </section>
-      <section class="control-section"><div class="section-heading"><h2>配置模板</h2></div><div class="template-actions"><button id="import-config" class="secondary-button" type="button">导入配置</button><button id="export-config" class="secondary-button" type="button">导出配置</button></div><input id="config-file" type="file" accept=".json,application/json" hidden /><p class="field-note">保存尺寸、外形和磁铁设置，下次导入即可复用；不包含图案文件。</p><p class="field-note" id="config-notice" role="status" hidden></p></section>
+      <section class="control-section" id="panel-magnets" data-settings-panel="magnets" role="tabpanel" aria-labelledby="tab-magnets" hidden>
+        <div class="section-heading"><h2>背面磁铁槽</h2></div>
+        <label class="magnet-toggle"><input id="magnetEnabled" type="checkbox" />启用磁铁槽</label>
+        <div id="magnet-fields" hidden><div class="field-row"><label class="field">磁铁直径<input id="magnetDiameter" type="number" value="6" min="2" max="30" step="0.1" /></label><label class="field">磁铁厚度<input id="magnetThickness" type="number" value="2" min="0.5" max="10" step="0.1" /></label></div><p class="field-note">自动预留：直径 +0.3 mm，深度 +0.1 mm。</p>
+          <button id="place-magnets" class="primary-button" type="button">在背面选点</button>
+          <p class="field-note">点击底壳添加位置，最多 8 个；每个位置可删除重选。</p>
+          <ol id="magnet-point-list" class="magnet-point-list"></ol>
+          <div class="template-actions"><button id="center-magnet" class="secondary-button" type="button">恢复中心位置</button><button id="clear-magnets" class="secondary-button" type="button">清空位置</button></div>
+        </div>
+        <p class="field-note" id="magnet-note" hidden></p>
+        <button class="text-button" id="view-back-button" type="button" disabled>查看背面磁铁槽</button>
+      </section>
+      <details class="control-section config-panel" data-settings-panel="dimensions" hidden><summary>配置模板</summary><div class="template-actions"><button id="import-config" class="secondary-button" type="button">导入配置</button><button id="export-config" class="secondary-button" type="button">导出配置</button></div><input id="config-file" type="file" accept=".json,application/json" hidden /><p class="field-note">保存尺寸、外形和磁铁设置，下次导入即可复用；不包含图案文件。</p><p class="field-note" id="config-notice" role="status" hidden></p></details>
+      </div>
       <div class="inspector-foot"><button id="reset-button" class="text-button" type="button">重置尺寸</button><span>尺寸变化后自动生成</span></div>
     </aside>
     <section class="preview-panel" aria-label="三维模型预览">
       <div class="preview-heading"><div><span class="eyebrow">模型预览</span><h2 id="model-title">你的下一枚徽章</h2></div><span class="status-pill" id="status-pill" data-state="loading"><i></i><span id="status-label">准备生成器</span></span></div>
       <div class="top-export-bar"><span class="eyebrow">导出模型</span><div class="export-buttons"><button data-export="scad" class="secondary-button compact" disabled type="button">SCAD</button><button data-export="stl" class="secondary-button" disabled type="button">下载 STL</button><button data-export="3mf" class="primary-button" disabled type="button">下载彩色 3MF</button></div></div>
+      <div class="feedback" id="feedback" role="status" aria-live="polite" hidden></div>
       <div class="viewport" id="viewport">
+        <div class="placement-banner" id="placement-banner" hidden><span>背面选点：点击底壳添加磁铁位置</span><button id="placement-done" type="button" class="primary-button">完成选点</button></div>
         <div class="preview-placeholder" id="preview-placeholder"><span class="placeholder-shape" aria-hidden="true"></span><p>上传一张 SVG，从平面开始。</p></div>
         <div class="viewer-actions"><button id="fit-button" class="icon-button" type="button" title="恢复视角" aria-label="恢复视角"><svg viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button><button id="top-button" class="icon-button" type="button" title="俯视图" aria-label="俯视图"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12h8M12 8v8"/></svg></button><button id="back-button" class="icon-button view-label" type="button" title="查看背面" aria-label="查看背面">背面</button><button id="grid-button" class="icon-button" type="button" title="显示网格" aria-label="显示网格" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M4 15h16M10 4v16M15 4v16"/></svg></button></div>
         <p class="viewport-hint">拖动旋转 · 滚轮缩放</p>
         <div class="model-dimensions" id="model-dimensions">—</div>
       </div>
-      <div class="feedback" id="feedback" role="status" aria-live="polite" hidden></div>
       <div class="export-bar">
         <div class="export-summary"><span class="eyebrow">准备打印</span><strong id="export-summary">生成后即可下载</strong><span id="export-detail">彩色打印使用 3MF，单色打印使用 STL。</span></div>
       </div>

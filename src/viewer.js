@@ -21,6 +21,30 @@ export function createViewer(container) {
   const group = new THREE.Group();
   group.rotation.x = -Math.PI / 2;
   scene.add(group);
+  const markers = new THREE.Group();
+  markers.rotation.x = group.rotation.x;
+  scene.add(markers);
+  let picking = false, pickCallback = null;
+  const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
+  let pointerStart = null;
+  renderer.domElement.addEventListener('pointerdown', event => {
+    pointerStart = [event.clientX, event.clientY];
+  });
+  renderer.domElement.addEventListener('pointerup', event => {
+    if (!picking || !currentBox || !pointerStart ||
+        Math.hypot(event.clientX-pointerStart[0], event.clientY-pointerStart[1]) > 5) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.set((event.clientX-rect.left)/rect.width*2-1, 1-(event.clientY-rect.top)/rect.height*2);
+    camera.updateMatrixWorld(); group.updateMatrixWorld(true);
+    raycaster.setFromCamera(mouse, camera);
+    const base = group.children.find(child => child.isMesh);
+    const hit = base && raycaster.intersectObject(base, false)[0];
+    if (!hit) { pickCallback?.(null); return; }
+    const local = group.worldToLocal(hit.point.clone());
+    const u = (local.x-currentBox.min.x)/(currentBox.max.x-currentBox.min.x);
+    const v = (local.y+currentBox.max.z)/(currentBox.max.z-currentBox.min.z);
+    pickCallback?.([Math.max(0,Math.min(1,u)), Math.max(0,Math.min(1,v))]);
+  });
   scene.add(new THREE.HemisphereLight(0xffffff, 0xc1c5cd, 1.1));
   scene.add(new THREE.AmbientLight(0xffffff, .25));
   const key = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -63,6 +87,7 @@ export function createViewer(container) {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    if (currentBox) fit(picking ? 'pick' : 'current');
   }
   const observer = new ResizeObserver(resize);
   observer.observe(container);
@@ -74,6 +99,7 @@ export function createViewer(container) {
     const extent = Math.max(size.x, size.z, size.y * 2);
     const distance = extent / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.55 / Math.min(1, camera.aspect);
     const direction = view === 'top' ? new THREE.Vector3(0, 1, .0001)
+      : view === 'pick' ? new THREE.Vector3(0, -1, .0001)
       : view === 'back' ? new THREE.Vector3(.35, -1, .55).normalize()
         : view === 'current' ? camera.position.clone().sub(controls.target).normalize()
           : new THREE.Vector3(.7, 1.05, 1.35).normalize();
@@ -88,11 +114,13 @@ export function createViewer(container) {
   function disposeObject(object) {
     object.traverse(child => {
       child.geometry?.dispose();
+      child.material?.map?.dispose();
       if (Array.isArray(child.material)) child.material.forEach(material => material.dispose());
       else child.material?.dispose();
     });
   }
   function clearModel() {
+    for (const child of [...markers.children]) { disposeObject(child); markers.remove(child); }
     for (const child of [...group.children]) {
       disposeObject(child);
       group.remove(child);
@@ -129,18 +157,55 @@ export function createViewer(container) {
         group.add(object);
       }
       currentBox = new THREE.Box3().setFromObject(group);
-      if (!hadModel || resetCamera) fit();
+      if (picking) fit('pick');
+      else if (!hadModel || resetCamera) fit();
       else if (oldSize && oldSize.distanceTo(currentBox.getSize(new THREE.Vector3())) > .01) fit('current');
       container.classList.add('has-model');
     },
     fit: () => fit(),
     top: () => fit('top'),
     back: () => fit('back'),
+    setPickMode(enabled, callback) {
+      picking = enabled; pickCallback = callback;
+      controls.enableRotate = !enabled; controls.enablePan = !enabled;
+      controls.enableDamping = !enabled;
+      markers.visible = enabled;
+      renderer.domElement.style.cursor = enabled ? 'crosshair' : '';
+      if (enabled) fit('pick');
+    },
+    showMagnetPoints(points, diameter) {
+      for (const child of [...markers.children]) { disposeObject(child); markers.remove(child); }
+      if (!currentBox) return;
+      points.forEach(([u, v], index) => {
+        const x = currentBox.min.x + u*(currentBox.max.x-currentBox.min.x);
+        const y = -currentBox.max.z + v*(currentBox.max.z-currentBox.min.z);
+        const radius = (diameter+.3)/2;
+        const disk = new THREE.Mesh(new THREE.CircleGeometry(radius, 64),
+          new THREE.MeshBasicMaterial({ color: 0x365eec, side: THREE.DoubleSide, transparent: true, opacity: .16, depthTest: false }));
+        disk.position.set(x, y, -.04); disk.renderOrder = 10;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(radius*.98, radius*1.025, 64),
+          new THREE.MeshBasicMaterial({ color: 0x365eec, side: THREE.DoubleSide, depthTest: false }));
+        ring.position.copy(disk.position); ring.renderOrder = 11;
+        markers.add(disk, ring);
+        const labelCanvas = document.createElement('canvas'); labelCanvas.width = labelCanvas.height = 64;
+        const context = labelCanvas.getContext('2d');
+        if (context) {
+          context.fillStyle = '#365eec'; context.beginPath(); context.arc(32,32,26,0,Math.PI*2); context.fill();
+          context.fillStyle = '#ffffff'; context.font = 'bold 32px sans-serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(String(index+1),32,34);
+          const texture = new THREE.CanvasTexture(labelCanvas);
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+          sprite.position.set(x,y,-.06); sprite.scale.set(Math.max(1.2,diameter*.32),Math.max(1.2,diameter*.32),1); sprite.renderOrder = 12;
+          markers.add(sprite);
+        }
+      });
+      markers.visible = picking;
+    },
     toggleGrid: () => { gridEnabled = !gridEnabled; syncInspectionView(); return gridEnabled; },
     dispose() {
       renderer.setAnimationLoop(null);
       controls.dispose(); observer.disconnect();
       for (const child of group.children) disposeObject(child);
+      for (const child of markers.children) disposeObject(child);
       ground.geometry.dispose(); ground.material.dispose(); grid.geometry.dispose(); grid.material.dispose();
       renderer.dispose(); renderer.domElement.remove();
     },

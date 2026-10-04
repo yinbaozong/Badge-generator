@@ -1,4 +1,5 @@
 import './style.css';
+import './workspace.css';
 import { parseArtwork } from './svg.js';
 import { traceRaster } from './raster.js';
 import { createViewer } from './viewer.js';
@@ -17,6 +18,51 @@ let requestId = 0, uploadId = 0, timer = null, thumbnailUrl = null, needsCameraR
 let viewer = null;
 let previousShape = 'rect', standardHeight = defaults.height;
 let rasterFile = null;
+let magnetPoints = [[.5, .5]], magnetEditing = false, lastGoodResult = null;
+function selectPanel(name) {
+  for (const button of document.querySelectorAll('.settings-tabs button')) {
+    const active = button.dataset.panel === name;
+    button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;
+  }
+  for (const section of document.querySelectorAll('[data-settings-panel]')) section.hidden = section.dataset.settingsPanel !== name;
+  document.querySelector('.settings-scroll').scrollTop = 0;
+}
+const tabButtons = [...document.querySelectorAll('.settings-tabs button')];
+for (const button of tabButtons) {
+  button.addEventListener('click', () => selectPanel(button.dataset.panel));
+  button.addEventListener('keydown', event => {
+    if (!['ArrowLeft','ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const next = tabButtons[(tabButtons.indexOf(button)+(event.key==='ArrowRight'?1:2))%3];
+    selectPanel(next.dataset.panel); next.focus();
+  });
+}
+const fieldErrors = new Map();
+for (const field of numericFields) {
+  const input = $(field), range = document.createElement('span'), error = document.createElement('span');
+  range.className = 'field-range'; range.textContent = `${input.min}–${input.max} mm`;
+  error.className = 'field-error'; error.hidden = true; error.id = `${field}-error`;
+  input.setAttribute('aria-describedby', error.id);
+  input.parentElement.append(range, error); fieldErrors.set(field, error);
+}
+function validateFields() {
+  let firstError = null;
+  for (const field of numericFields) {
+    const input = $(field), error = fieldErrors.get(field);
+    const ignored = input.disabled || (field==='cornerRadius' && $('shape').value==='logo') ||
+      (field==='puzzleClearance' && $('shape').value!=='puzzle') ||
+      (field.startsWith('magnet') && !$('magnetEnabled').checked);
+    const invalid = !ignored && (!Number.isFinite(input.valueAsNumber) || input.valueAsNumber < Number(input.min) || input.valueAsNumber > Number(input.max));
+    input.setAttribute('aria-invalid', String(invalid)); error.hidden = !invalid;
+    if (invalid) {
+      const label = {width:'徽章宽度',height:'徽章长度（Y）',baseThickness:'底座厚度',cornerRadius:'圆角',margin:'图案留边',reliefHeight:'图案凸起高度',puzzleClearance:'拼图间隙',magnetDiameter:'磁铁直径',magnetThickness:'磁铁厚度'}[field];
+      // The field itself keeps a concise bilingual range even while typing.
+      error.textContent = `${input.min}–${input.max} mm`;
+      firstError ??= `${label}应在 ${input.min}～${input.max} 毫米之间。`;
+    }
+  }
+  return firstError;
+}
 function syncShapeControls() {
   const logo = $('shape').value === 'logo', hexagon = $('shape').value === 'hexagon';
   const autoLength = logo || hexagon, wasAuto = ['logo', 'hexagon'].includes(previousShape);
@@ -26,6 +72,7 @@ function syncShapeControls() {
   $('height-label').textContent = autoLength ? '长度（Y，自动）' : '长度（Y）';
   $('corner-field').hidden = logo; $('logo-size-note').hidden = !logo;
   $('hex-size-note').hidden = !hexagon;
+  $('puzzle-field').hidden = $('shape').value !== 'puzzle';
   $('magnet-fields').hidden = !$('magnetEnabled').checked;
   previousShape = $('shape').value;
 }
@@ -39,11 +86,13 @@ function status(state, text) { $('status-pill').dataset.state = state; $('status
 function feedback(messages, error = false) {
   $('feedback').hidden = messages.length === 0;
   $('feedback').classList.toggle('error', error);
+  $('feedback').setAttribute('aria-live', error ? 'assertive' : 'polite');
   $('feedback').textContent = messages.join('\n');
 }
 function setExportEnabled(enabled) {
   for (const button of exportButtons) button.disabled = !enabled;
-  $('view-back-button').disabled = !enabled || !viewer || !result?.stats.magnets?.count;
+  $('view-back-button').disabled = !viewer || !lastGoodResult;
+  $('place-magnets').disabled = !viewer || !artwork;
 }
 function clearPreview(message = '上传一张 SVG，从平面开始。') {
   try { viewer?.clear(); } catch { /* Downloads remain independent of rendering. */ }
@@ -57,27 +106,32 @@ function beginUpload() {
   const token = ++uploadId;
   ++requestId; result = null; artwork = null; clearTimeout(timer);
   rasterFile = null; $('raster-options').hidden = true;
+  lastGoodResult = null; stopMagnetPicking();
   setExportEnabled(false); clearPreview('正在读取图案…');
   $('svg-thumbnail').hidden = true;
   status('loading', '读取图案');
   return token;
 }
 function parameters() {
-  const values = { shape: $('shape').value, mode, magnetEnabled: $('magnetEnabled').checked };
+  const values = { shape: $('shape').value, mode, magnetEnabled: $('magnetEnabled').checked, magnetPoints: magnetPoints.map(p=>[...p]) };
   for (const field of numericFields) values[field] = $('' + field).value === '' ? NaN : Number($(field).value);
   return values;
 }
 function generate() {
   clearTimeout(timer);
+  ++requestId;
   syncShapeControls();
   if (!artwork) return;
   setExportEnabled(false); result = null;
   status('loading', '正在生成');
   $('export-summary').textContent = '正在生成模型…';
   feedback(viewerWarnings);
+  const fieldError = validateFields();
+  if (fieldError) { status('error', '需要调整'); feedback([fieldError], true); $('export-summary').textContent='调整后重新生成'; return; }
   $('puzzle-field').hidden = $('shape').value !== 'puzzle';
-  const { shapes, warnings } = artwork;
-  worker.postMessage({ id: ++requestId, artwork: { shapes, warnings }, params: parameters() });
+  const { shapes, warnings, silhouette } = artwork;
+  const params = parameters(); if (magnetEditing) params.magnetEnabled = false;
+  worker.postMessage({ id: requestId, artwork: { shapes, warnings, silhouette }, params });
 }
 function schedule() {
   syncShapeControls();
@@ -90,12 +144,13 @@ function schedule() {
 worker.onmessage = ({ data }) => {
   if (data.id !== requestId) return;
   if (data.error) {
-    clearPreview('调整设置后重新生成。');
+    if (!lastGoodResult) clearPreview('调整设置后重新生成。');
     status('error', '需要调整'); feedback([data.error], true);
-    $('export-summary').textContent = '调整后重新生成';
+    $('export-summary').textContent = lastGoodResult ? '预览保留上次有效设置，调整后可导出' : '调整后重新生成';
     return;
   }
   result = data.result;
+  lastGoodResult = result;
   try { viewer?.update(result.parts, needsCameraReset); }
   catch {
     try { viewer?.dispose(); } catch { /* Keep a valid model available for download. */ }
@@ -103,9 +158,10 @@ worker.onmessage = ({ data }) => {
     viewerWarnings.push('三维预览加载失败，模型仍可下载。');
   }
   needsCameraReset = false;
+  renderMagnetPoints();
   $('preview-placeholder').hidden = !!viewer;
   if (!viewer) $('preview-placeholder').querySelector('p').textContent = '模型已生成，可以直接下载。';
-  status('ready', '模型已生成');
+  status(magnetEditing ? 'loading' : 'ready', magnetEditing ? '正在选点' : '模型已生成');
   $('model-title').textContent = filename;
   const [x, y, z] = result.stats.dimensions;
   const reliefRange = result.stats.reliefHeightMax > result.stats.reliefHeight
@@ -113,6 +169,7 @@ worker.onmessage = ({ data }) => {
   $('model-dimensions').textContent = `X ${x.toFixed(1)} × Y ${y.toFixed(1)} × Z ${z.toFixed(1)} mm\n底壳 ${result.stats.baseThickness.toFixed(1)} mm · Logo ${reliefRange} mm`;
   if (['logo', 'hexagon'].includes($('shape').value)) $('height').value = y.toFixed(1);
   $('export-summary').textContent = `${result.stats.colorCount} 个图案色区 · ${result.stats.partCount} 个部件`;
+  if (magnetEditing) $('export-summary').textContent = '选点完成后生成磁铁槽';
   $('export-detail').textContent = `${result.stats.mergedTriangleCount.toLocaleString()} 个三角面 · 已生成完整模型`;
   const magnets = result.stats.magnets;
   $('magnet-note').hidden = !magnets?.count;
@@ -126,7 +183,7 @@ worker.onmessage = ({ data }) => {
     swatch.title = color; swatch.setAttribute('aria-label', `颜色 ${color}`);
     $('palette').append(swatch);
   }
-  setExportEnabled(true);
+  setExportEnabled(!magnetEditing);
 };
 worker.onerror = () => {
   ++requestId; clearPreview('请刷新页面后重新上传。');
@@ -225,12 +282,55 @@ for (const button of document.querySelectorAll('.mode-button')) button.addEventL
   setMode(button.dataset.mode);
   schedule();
 });
-$('reset-button').addEventListener('click', () => { for (const [field, value] of Object.entries(defaults)) $(field).value = value; standardHeight = defaults.height; needsCameraReset = true; generate(); });
-$('fit-button').addEventListener('click', () => viewer?.fit());
-$('top-button').addEventListener('click', () => viewer?.top());
-$('back-button').addEventListener('click', () => viewer?.back());
-$('view-back-button').addEventListener('click', () => viewer?.back());
+$('reset-button').addEventListener('click', () => { for (const [field, value] of Object.entries(defaults)) $(field).value = value; standardHeight = defaults.height; magnetPoints = [[.5,.5]]; renderMagnetPoints(); needsCameraReset = true; generate(); });
+$('fit-button').addEventListener('click', () => { if (!magnetEditing) viewer?.fit(); });
+$('top-button').addEventListener('click', () => { if (!magnetEditing) viewer?.top(); });
+$('back-button').addEventListener('click', () => { if (!magnetEditing) viewer?.back(); });
+$('view-back-button').addEventListener('click', () => { if (!magnetEditing) viewer?.back(); });
 $('grid-button').addEventListener('click', () => { const enabled = viewer?.toggleGrid() ?? false; $('grid-button').setAttribute('aria-pressed', String(enabled)); });
+
+function renderMagnetPoints() {
+  $('magnet-point-list').replaceChildren();
+  magnetPoints.forEach((point, index) => {
+    const row = document.createElement('li'), label = document.createElement('span'), remove = document.createElement('button');
+    label.textContent = `${index+1} 号磁铁位置`;
+    remove.type = 'button'; remove.textContent = '删除';
+    remove.addEventListener('click', () => {
+      magnetPoints.splice(index,1); renderMagnetPoints(); if (!magnetEditing) schedule();
+    });
+    row.append(label, remove); $('magnet-point-list').append(row);
+  });
+  const diameter = Math.max(2,Math.min(30,Number($('magnetDiameter').value)||6));
+  viewer?.showMagnetPoints(magnetPoints, diameter);
+}
+function stopMagnetPicking() {
+  magnetEditing = false; viewer?.setPickMode(false);
+  $('placement-banner').hidden = true;
+  for (const id of ['fit-button','top-button','back-button']) $(id).disabled = false;
+}
+function startMagnetPicking() {
+  if (!viewer || !artwork) return;
+  if (magnetPoints.length===1 && magnetPoints[0][0]===.5 && magnetPoints[0][1]===.5 && !lastGoodResult?.stats.magnets?.count) magnetPoints=[];
+  $('magnetEnabled').checked = true; syncShapeControls(); selectPanel('magnets');
+  magnetEditing = true; $('placement-banner').hidden = false;
+  for (const id of ['fit-button','top-button','back-button']) $(id).disabled = true;
+  viewer.setPickMode(true, point => {
+    if (!point) { feedback(['请选择底壳上的位置。'],true); return; }
+    if (magnetPoints.length>=8) { feedback(['最多支持 8 个磁铁位置，请先删除一个。'],true); return; }
+    magnetPoints.push(point); renderMagnetPoints(); feedback(lastGoodResult?.warnings || []);
+  });
+  renderMagnetPoints(); generate();
+}
+$('place-magnets').addEventListener('click', startMagnetPicking);
+$('placement-done').addEventListener('click', () => {
+  if (!magnetPoints.length) { feedback(['请添加至少一个磁铁位置，或关闭磁铁槽。'],true); return; }
+  stopMagnetPicking(); generate();
+});
+$('center-magnet').addEventListener('click', () => { magnetPoints=[[.5,.5]]; renderMagnetPoints(); if (!magnetEditing) schedule(); });
+$('clear-magnets').addEventListener('click', () => { magnetPoints=[]; renderMagnetPoints(); if (!magnetEditing) startMagnetPicking(); });
+$('magnetDiameter').addEventListener('input', renderMagnetPoints);
+$('magnetEnabled').addEventListener('change', () => { if (!$('magnetEnabled').checked) { stopMagnetPicking(); generate(); } });
+renderMagnetPoints();
 
 async function loadExample() {
   const token = beginUpload();
@@ -258,7 +358,7 @@ async function download(kind) {
     if (kind === 'scad') downloadFile(exportSCAD(exportParts, savedName), `${savedName}-${suffix}.scad`, 'text/plain;charset=utf-8');
     if (result === snapshot) status('ready', `${kind.toUpperCase()} 已导出`);
   } catch (error) { status('error', '导出失败'); feedback([error.message], true); }
-  finally { if (result) setExportEnabled(true); }
+  finally { if (result) setExportEnabled(!magnetEditing); }
 }
 for (const button of document.querySelectorAll('[data-export]')) button.addEventListener('click', () => download(button.dataset.export));
 function configNotice(message, error = false) {
@@ -285,6 +385,7 @@ $('config-file').addEventListener('change', async event => {
     for (const field of numericFields) $(field).value = settings[field];
     $('shape').value = settings.shape; previousShape = settings.shape; standardHeight = settings.height;
     $('magnetEnabled').checked = settings.magnetEnabled; setMode(settings.mode);
+    stopMagnetPicking(); magnetPoints = settings.magnetPoints; renderMagnetPoints();
     needsCameraReset = true; syncShapeControls(); schedule();
     configNotice('配置已导入，当前图案将使用这套设置。');
   } catch (error) { configNotice(error.message, true); }

@@ -40,6 +40,12 @@ function readParameters(params) {
   const shape = params.shape ?? 'rect';
   const mode = params.mode ?? 'multi';
   const magnetEnabled = params.magnetEnabled === true;
+  const magnetPoints = params.magnetPoints ?? [[.5, .5]];
+  if (!Array.isArray(magnetPoints) || magnetPoints.length > 8 || magnetPoints.some(p =>
+      !Array.isArray(p) || p.length !== 2 || p.some(v => !Number.isFinite(v) || v < 0 || v > 1))) {
+    throw new Error('磁铁位置无效，请重新选点。');
+  }
+  if (magnetEnabled && magnetPoints.length === 0) throw new Error('请添加至少一个磁铁位置，或关闭磁铁槽。');
   if (!['rect', 'hexagon', 'puzzle', 'logo'].includes(shape)) {
     throw new Error('徽章外形选项无效。');
   }
@@ -50,14 +56,15 @@ function readParameters(params) {
     shape,
     mode,
     magnetEnabled,
+    magnetPoints,
     magnetDiameter: magnetEnabled ? numberInRange(params.magnetDiameter ?? 6, 2, 30, '磁铁直径') : 6,
     magnetThickness: magnetEnabled ? numberInRange(params.magnetThickness ?? 2, 0.5, 10, '磁铁厚度') : 2,
     width: numberInRange(params.width ?? 40, 15, 150, '徽章宽度'),
     height: shape === 'logo' || shape === 'hexagon' ? 40 : numberInRange(params.height ?? 40, 15, 150, '徽章长度（Y）'),
-    baseThickness: numberInRange(params.baseThickness ?? 3, 1.5, 8, '底座厚度'),
+    baseThickness: numberInRange(params.baseThickness ?? 3, 1.5, 20, '底座厚度'),
     cornerRadius: shape === 'logo' ? 0 : numberInRange(params.cornerRadius ?? 3, 0, 15, '圆角'),
     margin: numberInRange(params.margin ?? 4, 0.5, 20, '图案留边'),
-    reliefHeight: numberInRange(params.reliefHeight ?? 1, 0.2, 5, '图案凸起高度'),
+    reliefHeight: numberInRange(params.reliefHeight ?? 1, 0.2, 20, '图案凸起高度'),
     puzzleClearance: numberInRange(params.puzzleClearance ?? 0.2, 0.05, 0.6, '拼图间隙'),
   };
   if (shape === 'hexagon') values.height = values.width * Math.sqrt(3) / 2;
@@ -175,6 +182,8 @@ export async function buildBadge(artwork, params = {}) {
     : section;
 
   try {
+    const rasterMask = Array.isArray(artwork.silhouette)
+      ? keep(new CrossSection(validatedContours(artwork.silhouette, pointCounter), 'NonZero')) : null;
     // SVG paints from back to front. Later shapes hide earlier regions even
     // when the later shape is white; white is never treated as transparency.
     let covered = empty();
@@ -186,7 +195,8 @@ export async function buildBadge(artwork, params = {}) {
       const contours = validatedContours(shape.contours, pointCounter);
       if (contours.length === 0) continue;
       const fillRule = shape.fillRule === 'EvenOdd' ? 'EvenOdd' : 'NonZero';
-      const section = keep(new CrossSection(contours, fillRule));
+      let section = keep(new CrossSection(contours, fillRule));
+      if (rasterMask) section = keep(section.intersect(rasterMask));
       if (section.isEmpty()) continue;
       if (color !== '#FFFFFF') coloredSources.push(section);
       const painted = keep(section.subtract(covered));
@@ -327,33 +337,29 @@ export async function buildBadge(artwork, params = {}) {
     if (colorRegions.length === 0) throw new Error('图案没有落在底座内，请调整图案留边。');
 
     const magnetDiameter = options.magnetDiameter, magnetThickness = options.magnetThickness;
-    const magnetCount = options.magnetEnabled ? 1 : 0;
+    const magnetCount = options.magnetEnabled ? options.magnetPoints.length : 0;
     const pocketDiameter = magnetDiameter + 0.3;
     const pocketDepth = magnetThickness + 0.1;
     const baseHeight = magnetCount > 0
       ? Math.max(options.baseThickness, pocketDepth + 0.5 + ANCHOR)
       : options.baseThickness;
-    const spacingX = options.width * 0.45;
-    const spacingY = options.height * 0.45;
-    if (magnetCount >= 2 && spacingX <= pocketDiameter + 1) {
-      throw new Error('徽章太窄，放不下多个磁铁槽：请选择中心 1 个或增大宽度。');
-    }
-    if (magnetCount === 4 && spacingY <= pocketDiameter + 1) {
-      throw new Error('徽章太矮，放不下四个磁铁槽：请减少数量或增大高度。');
-    }
-    const magnetPositions = magnetCount === 1 ? [[0, 0]]
-      : magnetCount === 2 ? [[-spacingX / 2, 0], [spacingX / 2, 0]]
-        : magnetCount === 4 ? [
-          [-spacingX / 2, -spacingY / 2], [spacingX / 2, -spacingY / 2],
-          [-spacingX / 2, spacingY / 2], [spacingX / 2, spacingY / 2],
-        ] : [];
+    const outlineBox = outline.bounds();
+    const magnetPositions = options.magnetEnabled ? options.magnetPoints.map(([u, v]) => [
+      outlineBox.min[0] + u * (outlineBox.max[0] - outlineBox.min[0]),
+      outlineBox.min[1] + v * (outlineBox.max[1] - outlineBox.min[1]),
+    ]) : [];
 
     let base = keep(outline.extrude(baseHeight));
-    for (const [x, y] of magnetPositions) {
+    for (const [index, [x, y]] of magnetPositions.entries()) {
+      for (let other = 0; other < index; other++) {
+        if (Math.hypot(x-magnetPositions[other][0], y-magnetPositions[other][1]) < pocketDiameter + .5) {
+          throw new Error(`${index + 1} 号与 ${other + 1} 号磁铁槽太近，请重新选点。`);
+        }
+      }
       // Keep at least a 0.5 mm side wall, including on irregular logo bases.
       const wallCircle = keep(keep(CrossSection.circle(pocketDiameter / 2 + 0.5, SEGMENTS)).translate([x, y]));
       if (keep(wallCircle.subtract(outline)).area() > AREA_EPSILON) {
-        throw new Error('磁铁槽超出底座，或距离边缘不足 0.5 毫米：请选择更小磁铁、减少数量或增大徽章。');
+        throw new Error(`${index + 1} 号磁铁槽超出底壳或距离边缘不足 0.5 mm，请重新选点或减小直径。`);
       }
       const pocket = keep(keep(Manifold.cylinder(pocketDepth + EPSILON, pocketDiameter / 2,
         pocketDiameter / 2, SEGMENTS)).translate([x, y, -EPSILON]));
@@ -400,7 +406,7 @@ export async function buildBadge(artwork, params = {}) {
         baseThickness: baseHeight,
         reliefHeight: options.reliefHeight,
         reliefHeightMax: options.reliefHeight + (options.mode === 'multi' ? (colorRegions.length - 1) * COLOR_STEP : 0),
-        magnets: { count: magnetCount, diameter: magnetCount ? pocketDiameter : 0, depth: magnetCount ? pocketDepth : 0 },
+        magnets: { count: magnetCount, diameter: magnetCount ? pocketDiameter : 0, depth: magnetCount ? pocketDepth : 0, positions: magnetPositions },
         dimensions: bounds.max.map((value, index) => value - bounds.min[index]),
       },
     };

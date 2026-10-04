@@ -1,7 +1,7 @@
 // Experimental local raster tracing: transparency, edge-connected matte removal,
 // color quantization and oriented pixel-boundary contours. No remote service.
-const MAX_SIDE = 768;
-const ANALYSIS_SIDE = 1536;
+const MAX_SIDE = 1024;
+const ANALYSIS_SIDE = 2048;
 const ALPHA_CUTOFF = 128;
 function distance(a, b) { return (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2; }
 function area(points) { return points.reduce((sum, p, i) => { const q=points[(i+1)%points.length]; return sum+p[0]*q[1]-q[0]*p[1]; },0)/2; }
@@ -22,21 +22,23 @@ function simplifyOpen(points, tolerance) {
   return points.filter((_,i)=>keep[i]);
 }
 function simplifyRing(points) {
-  // Round pixel-sized staircase corners before fitting straight segments. This
-  // only changes subpixel edges, not the user's model corner-radius setting.
-  for (let pass = 0; pass < 2; pass++) {
-    const smooth = [];
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i], q = points[(i + 1) % points.length];
-      smooth.push([.75*p[0]+.25*q[0], .75*p[1]+.25*q[1]],
-        [.25*p[0]+.75*q[0], .25*p[1]+.75*q[1]]);
-    }
-    points = smooth;
+  // Smooth the uniformly spaced boundary BEFORE simplification. Rounding each
+  // pixel corner alone left whole staircase segments on curved letters.
+  if (points.length > 16) {
+    const weights = [1,2,3,4,3,2,1];
+    for (let pass=0;pass<2;pass++) points=points.map((_,i)=>{
+      const p=[0,0];
+      for(let j=-3;j<=3;j++){
+        const q=points[(i+j+points.length)%points.length], weight=weights[j+3]/16;
+        p[0]+=q[0]*weight;p[1]+=q[1]*weight;
+      }
+      return p;
+    });
   }
   let pivot=1,far=0;
   for(let i=1;i<points.length;i++){const d=(points[i][0]-points[0][0])**2+(points[i][1]-points[0][1])**2;if(d>far){far=d;pivot=i;}}
-  return simplifyOpen(points.slice(0,pivot+1),.65).slice(0,-1)
-    .concat(simplifyOpen(points.slice(pivot).concat([points[0]]),.65).slice(0,-1));
+  return simplifyOpen(points.slice(0,pivot+1),.2).slice(0,-1)
+    .concat(simplifyOpen(points.slice(pivot).concat([points[0]]),.2).slice(0,-1));
 }
 function contoursFor(labels,w,h,color) {
   const edges=[],from=new Map(),stride=w+1;
@@ -125,7 +127,10 @@ export async function traceRaster(file, removeBackground=true) {
         const add=i=>{if(!removed[i]&&distance([data[4*i],data[4*i+1],data[4*i+2]],bg)<40**2){removed[i]=1;queue[tail++]=i;}};
         for(let x=0;x<w;x++){add(x);add((h-1)*w+x);}for(let y=0;y<h;y++){add(y*w);add(y*w+w-1);}
         while(head<tail){const i=queue[head++],x=i%w,y=Math.floor(i/w);if(x)add(i-1);if(x<w-1)add(i+1);if(y)add(i-w);if(y<h-1)add(i+w);}
-        warnings.push('已去除与图片边缘相连的相近背景色；请检查是否误删细节。');
+        // Enclosed background inside letters is the same matte as the edges.
+        // Remove it too, so holes and antialiased white fringes aren't extruded.
+        for(let i=0;i<n;i++)if(distance([data[4*i],data[4*i+1],data[4*i+2]],bg)<70**2)removed[i]=1;
+        warnings.push('已去除相近背景色和文字孔洞中的背景；请检查是否误删浅色细节。');
       }else warnings.push('背景颜色不统一，未自动抠除；建议上传透明背景图片。');
     }
     // Crop AFTER masking and BEFORE detail sampling. A small logo in a large
@@ -140,7 +145,7 @@ export async function traceRaster(file, removeBackground=true) {
     ctx.putImageData(image,0,0);
     const cropWidth=right-left+1,cropHeight=bottom-top+1;
     if (Math.max(cropWidth,cropHeight)/ratio < 200) warnings.push('原图图案分辨率较低，细节无法完全恢复；建议转换为 SVG 后上传。');
-    const detailScale=Math.min(3,MAX_SIDE/Math.max(cropWidth,cropHeight));
+    const detailScale=Math.min(4,MAX_SIDE/Math.max(cropWidth,cropHeight));
     const trimmed=document.createElement('canvas');
     trimmed.width=Math.max(1,Math.round(cropWidth*detailScale));
     trimmed.height=Math.max(1,Math.round(cropHeight*detailScale));
@@ -202,19 +207,44 @@ export async function traceRaster(file, removeBackground=true) {
       labels[i]=label;
     }
     cleanSpecks(labels,w,h);
+    if(removeBackground && centers.length>1){
+      const nearWhite=centers.map(c=>Math.min(...c)>235&&Math.max(...c)-Math.min(...c)<18);
+      const populations=new Uint32Array(centers.length);
+      for(const label of labels)if(label>=0)populations[label]++;
+      const old=labels.slice();
+      for(let i=0;i<n;i++){
+        const label=old[i];
+        if(label<0||!nearWhite[label]||populations[label]>visibleCount*.12)continue;
+        const x=i%w,y=Math.floor(i/w);let touchesMask=false,replacement=-1,best=Infinity;
+        for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+          const px=x+dx,py=y+dy;if(px<0||py<0||px>=w||py>=h){touchesMask=true;continue;}
+          const neighbor=old[py*w+px];
+          if(neighbor<0)touchesMask=true;
+          else if(!nearWhite[neighbor] && dx*dx+dy*dy<best){best=dx*dx+dy*dy;replacement=neighbor;}
+        }
+        if(touchesMask && replacement>=0)labels[i]=replacement;
+      }
+    }
     for(let i=0;i<n;i++){
       if(labels[i]<0){data[4*i+3]=0;continue;}
       for(let c=0;c<3;c++)data[4*i+c]=Math.round(centers[labels[i]][c]);data[4*i+3]=255;
     }
+    const mask=new Int8Array(n);
+    for(let i=0;i<n;i++)mask[i]=labels[i]<0?-1:0;
+    const silhouette=contoursFor(mask,w,h,0);
     const shapes=colors.map((color,i)=>({color,fillRule:'NonZero',contours:contoursFor(labels,w,h,i)})).filter(s=>s.contours.length);
+    // A shared footprint closes artificial gaps between separately fitted color
+    // boundaries. The modeler clips every color to this same outer boundary.
+    if(silhouette.length)shapes.unshift({color:colors[0],fillRule:'NonZero',contours:silhouette});
     if(!shapes.length)throw new Error('图片细节太小，无法生成轮廓，请使用更清晰的图案。');
     let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,pointCount=0;
     for(const s of shapes)for(const ring of s.contours)for(const [x,y]of ring){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);pointCount++;}
-    if(pointCount>200000)throw new Error('图片轮廓过于复杂，请使用更简单的图案。');
+    if(pointCount>180000)throw new Error('图片轮廓过于复杂，请使用更简单的图案。');
     const span=Math.max(x1-x0,y1-y0),cx=(x0+x1)/2,cy=(y0+y1)/2;
-    for(const s of shapes)s.contours=s.contours.map(ring=>ring.map(([x,y])=>[(x-cx)*100/span,(cy-y)*100/span]));
+    const normalize=ring=>ring.map(([x,y])=>[(x-cx)*100/span,(cy-y)*100/span]);
+    for(const s of shapes)s.contours=s.contours.map(normalize);
     ctx.putImageData(image,0,0);
     const previewBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-    return {shapes,warnings,pointCount,previewBlob};
+    return {shapes,silhouette:silhouette.map(normalize),warnings,pointCount,previewBlob};
   } finally {bitmap.close();}
 }

@@ -4,8 +4,8 @@ export const DEFAULTS = {
   magnetDiameter: 6, magnetThickness: 2,
 };
 const ranges = {
-  width: [15, 150], height: [15, 150], baseThickness: [1.5, 8],
-  cornerRadius: [0, 15], margin: [0.5, 20], reliefHeight: [0.2, 5],
+  width: [15, 150], height: [15, 150], baseThickness: [1.5, 20],
+  cornerRadius: [0, 15], margin: [0.5, 20], reliefHeight: [0.2, 20],
   puzzleClearance: [0.05, 0.6], magnetDiameter: [2, 30], magnetThickness: [0.5, 10],
 };
 export function validateSettings(input) {
@@ -19,16 +19,20 @@ export function validateSettings(input) {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) invalid();
     settings[key] = value;
   }
+  const points = input.magnetPoints ?? [[.5, .5]];
+  if (!Array.isArray(points) || points.length > 8 || points.some(p =>
+      !Array.isArray(p) || p.length !== 2 || p.some(v => typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1))) invalid();
+  settings.magnetPoints = points.map(p => [...p]);
   if (settings.shape === 'puzzle' && Math.min(settings.width, settings.height) < 25) invalid();
   return settings;
 }
 export function serializeSettings(input) {
-  return JSON.stringify({ format: 'svg-badge-settings', version: 1, settings: validateSettings(input) }, null, 2);
+  return JSON.stringify({ format: 'svg-badge-settings', version: 2, settings: validateSettings(input) }, null, 2);
 }
 export function parseSettings(text) {
   let file;
   try { file = JSON.parse(text); } catch { throw new Error('配置文件无效，请使用本工具导出的 JSON 文件。'); }
   if (!file || file.format !== 'svg-badge-settings') throw new Error('配置文件无效，请使用本工具导出的 JSON 文件。');
-  if (file.version !== 1) throw new Error('配置文件版本不支持。');
+  if (![1, 2].includes(file.version)) throw new Error('配置文件版本不支持。');
   return validateSettings(file.settings);
 }

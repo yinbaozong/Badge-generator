@@ -1,4 +1,17 @@
 const translations = {
+  '设置分组': 'Settings sections', '尺寸': 'Dimensions', '磁铁': 'Magnets',
+  '启用磁铁槽': 'Enable magnet pockets', '在背面选点': 'Place magnets on back',
+  '点击底壳添加位置，最多 8 个；每个位置可删除重选。': 'Click the backing to add up to 8 positions. Remove individual positions to replace them.',
+  '恢复中心位置': 'Reset to center', '清空位置': 'Clear positions', '删除': 'Remove',
+  '背面选点：点击底壳添加磁铁位置': 'Back view: click the backing to place magnets',
+  '完成选点': 'Done placing', '正在选点': 'Placing magnets',
+  '选点完成后生成磁铁槽': 'Finish placing to generate magnet pockets',
+  '请选择底壳上的位置。': 'Choose a position on the backing.',
+  '最多支持 8 个磁铁位置，请先删除一个。': 'Maximum 8 magnet positions. Remove one before adding another.',
+  '请添加至少一个磁铁位置，或关闭磁铁槽。': 'Add at least one magnet position, or disable magnet pockets.',
+  '磁铁位置无效，请重新选点。': 'Invalid magnet position. Place the magnets again.',
+  '预览保留上次有效设置，调整后可导出': 'Preview shows the last valid settings. Adjust settings before exporting.',
+  '已去除相近背景色和文字孔洞中的背景；请检查是否误删浅色细节。': 'Removed similar background colors, including inside letter holes. Check for lost light-colored details.',
   '图案预览': 'Artwork preview', '如果效果不理想，可先用': 'If the result needs improvement, use',
   '原图图案分辨率较低，细节无法完全恢复；建议转换为 SVG 后上传。': 'Source artwork is low resolution. Missing detail cannot be fully recovered; consider converting it to SVG first.',
   '转换为 SVG，再上传。': 'to convert your image to SVG, then upload it here.',
@@ -149,6 +162,9 @@ export function translate(text) {
     let translated = translations[source];
     if (translated === undefined) {
       const rules = [
+        [/^(\d+) 号磁铁位置$/, (_, n) => 'Magnet position ' + n],
+        [/^(\d+) 号与 (\d+) 号磁铁槽太近，请重新选点。$/, (_, a, b) => 'Magnet pockets ' + a + ' and ' + b + ' are too close. Place them farther apart.'],
+        [/^(\d+) 号磁铁槽超出底壳或距离边缘不足 0.5 mm，请重新选点或减小直径。$/, (_, n) => 'Magnet pocket ' + n + ' needs 0.5 mm clearance from the backing edge. Choose a new position or smaller diameter.'],
         [/^(\d+) 个图案色区 · (\d+) 个部件$/, (_, a, b) => a + ' artwork colors · ' + b + ' parts'],
         [/^([\d,]+) 个三角面 · 已生成完整模型$/, (_, n) => n + ' triangles · Complete model'],
         [/^(\d+) 个背面凹槽 · 实际直径 ([\d.]+) mm · 深 ([\d.]+) mm（已含安装余量）$/, (_, n, d, h) => n + ' rear pockets · Ø ' + d + ' mm · ' + h + ' mm deep (includes fit clearance)'],
