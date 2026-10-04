@@ -25,11 +25,12 @@ function simplifyRing(points) {
   // Smooth the uniformly spaced boundary BEFORE simplification. Rounding each
   // pixel corner alone left whole staircase segments on curved letters.
   if (points.length > 16) {
-    const weights = [1,2,3,4,3,2,1];
-    for (let pass=0;pass<2;pass++) points=points.map((_,i)=>{
+    const weights = Array.from({length:11},(_,i)=>Math.exp(-((i-5)**2)/(2*2.5**2)));
+    const total = weights.reduce((sum,weight)=>sum+weight,0);
+    for (let pass=0;pass<3;pass++) points=points.map((_,i)=>{
       const p=[0,0];
-      for(let j=-3;j<=3;j++){
-        const q=points[(i+j+points.length)%points.length], weight=weights[j+3]/16;
+      for(let j=-5;j<=5;j++){
+        const q=points[(i+j+points.length)%points.length], weight=weights[j+5]/total;
         p[0]+=q[0]*weight;p[1]+=q[1]*weight;
       }
       return p;
@@ -37,8 +38,20 @@ function simplifyRing(points) {
   }
   let pivot=1,far=0;
   for(let i=1;i<points.length;i++){const d=(points[i][0]-points[0][0])**2+(points[i][1]-points[0][1])**2;if(d>far){far=d;pivot=i;}}
-  return simplifyOpen(points.slice(0,pivot+1),.2).slice(0,-1)
-    .concat(simplifyOpen(points.slice(pivot).concat([points[0]]),.2).slice(0,-1));
+  let fitted = simplifyOpen(points.slice(0,pivot+1),.25).slice(0,-1)
+    .concat(simplifyOpen(points.slice(pivot).concat([points[0]]),.25).slice(0,-1));
+  // Short fitted segments still showed tiny corners when extruded. Subdivide
+  // the final ring with corner cutting; preserve winding and small contours.
+  if (fitted.length > 16) for (let pass=0;pass<2;pass++) {
+    const curved=[];
+    for(let i=0;i<fitted.length;i++){
+      const a=fitted[i],b=fitted[(i+1)%fitted.length];
+      curved.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],
+        [a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75]);
+    }
+    fitted=curved;
+  }
+  return fitted;
 }
 function contoursFor(labels,w,h,color) {
   const edges=[],from=new Map(),stride=w+1;

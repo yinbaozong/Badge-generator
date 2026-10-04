@@ -31,9 +31,9 @@ const tabButtons = [...document.querySelectorAll('.settings-tabs button')];
 for (const button of tabButtons) {
   button.addEventListener('click', () => selectPanel(button.dataset.panel));
   button.addEventListener('keydown', event => {
-    if (!['ArrowLeft','ArrowRight'].includes(event.key)) return;
+    if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) return;
     event.preventDefault();
-    const next = tabButtons[(tabButtons.indexOf(button)+(event.key==='ArrowRight'?1:2))%3];
+    const next = tabButtons[(tabButtons.indexOf(button)+(['ArrowRight','ArrowDown'].includes(event.key)?1:2))%3];
     selectPanel(next.dataset.panel); next.focus();
   });
 }

@@ -10,12 +10,13 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand-group"><a class="brand" href="./" aria-label="徽章生成器首页"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path class="mark-top" d="m16 5 11 6-11 6-11-6z"/><path d="M5 11v10l11 6 11-6V11M16 17v10"/></svg></span><h1>徽章生成器</h1></a><button id="language-button" class="language-switch" type="button" role="switch" aria-checked="true" aria-label="切换语言"><span class="language-en">EN</span><span class="language-zh">中文</span></button></div>
+    <div class="brand-group"><a class="brand" href="./" aria-label="徽章生成器首页"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><rect x="8" y="9" width="27" height="27" rx="8" fill="#17394b" transform="rotate(-10 21.5 22.5)"/><rect x="4" y="3" width="28" height="28" rx="8" fill="#365eec"/><path fill="#fff" fill-rule="evenodd" d="M12 9h7.5c4.2 0 6.4 1.7 6.4 4.8 0 1.9-1 3.2-2.6 3.9 2.1.7 3.3 2.2 3.3 4.2 0 3.5-2.7 5.1-7 5.1H12V9zm4 3.5v3.8h3c1.8 0 2.7-.6 2.7-1.9s-.9-1.9-2.7-1.9h-3zm0 7v4h3.3c2 0 3-.6 3-2s-1-2-3-2H16z"/></svg></span><h1>徽章生成器</h1></a><button id="language-button" class="language-switch" type="button" role="switch" aria-checked="true" aria-label="切换语言"><span class="language-en">EN</span><span class="language-zh">中文</span></button></div>
     <div class="header-actions"><a class="repository-link" href="https://github.com/yinbaozong/badge-generator" target="_blank" rel="noopener noreferrer">GitHub ↗</a><span class="local-note"><i aria-hidden="true"></i> 文件在你的浏览器处理</span></div>
   </header>
   <main class="workspace">
     <aside class="inspector" aria-label="徽章设置">
-      <nav class="settings-tabs" role="tablist" aria-label="设置分组"><button id="tab-artwork" type="button" role="tab" aria-selected="true" aria-controls="panel-artwork" data-panel="artwork">图案</button><button id="tab-dimensions" type="button" role="tab" aria-selected="false" aria-controls="panel-dimensions" data-panel="dimensions">尺寸</button><button id="tab-magnets" type="button" role="tab" aria-selected="false" aria-controls="panel-magnets" data-panel="magnets">磁铁</button></nav>
+      <section class="template-toolbar" aria-label="配置模板"><div class="template-actions"><button id="import-config" class="secondary-button" type="button">导入配置</button><button id="export-config" class="secondary-button" type="button">导出配置</button></div><input id="config-file" type="file" accept=".json,application/json" hidden /><p class="field-note">保存参数，下次导入复用；不包含图案。</p><p class="field-note" id="config-notice" role="status" hidden></p></section>
+      <nav class="settings-tabs" role="tablist" aria-orientation="vertical" aria-label="设置分组"><button id="tab-artwork" type="button" role="tab" aria-selected="true" aria-controls="panel-artwork" data-panel="artwork">图案</button><button id="tab-dimensions" type="button" role="tab" aria-selected="false" aria-controls="panel-dimensions" data-panel="dimensions">尺寸</button><button id="tab-magnets" type="button" role="tab" aria-selected="false" aria-controls="panel-magnets" data-panel="magnets">磁铁</button></nav>
       <div class="settings-scroll">
       <section class="upload-section" id="panel-artwork" data-settings-panel="artwork" role="tabpanel" aria-labelledby="tab-artwork">
         <div class="section-heading"><h2>图案</h2><button class="text-button" id="example-button" type="button">使用示例</button></div>
@@ -76,7 +77,6 @@
         <p class="field-note" id="magnet-note" hidden></p>
         <button class="text-button" id="view-back-button" type="button" disabled>查看背面磁铁槽</button>
       </section>
-      <details class="control-section config-panel" data-settings-panel="dimensions" hidden><summary>配置模板</summary><div class="template-actions"><button id="import-config" class="secondary-button" type="button">导入配置</button><button id="export-config" class="secondary-button" type="button">导出配置</button></div><input id="config-file" type="file" accept=".json,application/json" hidden /><p class="field-note">保存尺寸、外形和磁铁设置，下次导入即可复用；不包含图案文件。</p><p class="field-note" id="config-notice" role="status" hidden></p></details>
       </div>
       <div class="inspector-foot"><button id="reset-button" class="text-button" type="button">重置尺寸</button><span>尺寸变化后自动生成</span></div>
     </aside>

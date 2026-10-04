@@ -1,4 +1,5 @@
 const translations = {
+  '保存参数，下次导入复用；不包含图案。': 'Save settings to reuse later. Artwork is not included.',
   '设置分组': 'Settings sections', '尺寸': 'Dimensions', '磁铁': 'Magnets',
   '启用磁铁槽': 'Enable magnet pockets', '在背面选点': 'Place magnets on back',
   '点击底壳添加位置，最多 8 个；每个位置可删除重选。': 'Click the backing to add up to 8 positions. Remove individual positions to replace them.',
