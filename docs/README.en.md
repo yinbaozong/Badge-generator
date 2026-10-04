@@ -52,7 +52,8 @@ A logo outline can produce separate backing islands. Increase the border or choo
 - **Logo thickness Z** is the base relief thickness, adjustable from 0.2 to 50 mm. Multicolor regions add 0.2 mm steps.
 
 For a keychain, open the **Hole** tab below **Magnets** and enable **Keyring hole**. The default diameter is 4 mm. Choose automatic placement near the top, or click **Place hole on model**. The preview switches to a top view: click the artwork or backing to set the center, then click **Done placing**. Click elsewhere to replace the selected position.
-![打孔](docs/images/PixPin_2026-10-05_00-03-55.png)
+
+![打孔](images/PixPin_2026-10-05_00-03-55.png)
 
 You can also enter X/Y coordinates measured from the model center (X right, Y up). The hole cuts through backing and artwork and works in logo-only mode too. At least 1 mm of material must remain around it; if it does not fit, adjust the diameter or position. Hole settings are included in exported settings files.
 - **Border** controls the backing left around the artwork.
