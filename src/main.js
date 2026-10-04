@@ -19,6 +19,7 @@ let viewer = null;
 let previousShape = 'rect', previousLogoOnly = false, standardHeight = defaults.height;
 let rasterFile = null;
 let magnetPoints = [[.5, .5]], magnetEditing = false, lastGoodResult = null;
+let keyringEditing = false, keyringPickPoint = null;
 function selectPanel(name) {
   for (const button of document.querySelectorAll('.settings-tabs button')) {
     const active = button.dataset.panel === name;
@@ -33,7 +34,7 @@ for (const button of tabButtons) {
   button.addEventListener('keydown', event => {
     if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) return;
     event.preventDefault();
-    const next = tabButtons[(tabButtons.indexOf(button)+(['ArrowRight','ArrowDown'].includes(event.key)?1:2))%3];
+    const next = tabButtons[(tabButtons.indexOf(button)+(['ArrowRight','ArrowDown'].includes(event.key)?1:tabButtons.length-1))%tabButtons.length];
     selectPanel(next.dataset.panel); next.focus();
   });
 }
@@ -52,7 +53,7 @@ function validateFields() {
     const ignored = input.disabled || (field==='cornerRadius' && $('shape').value==='logo') ||
       (field==='puzzleClearance' && $('shape').value!=='puzzle') ||
       (field.startsWith('magnet') && (!$('magnetEnabled').checked || $('logoOnly').checked)) ||
-      (field.startsWith('keyring') && (!$('keyringEnabled').checked || (field !== 'keyringDiameter' && $('keyringPosition').value !== 'custom')));
+      (field.startsWith('keyring') && (!$('keyringEnabled').checked || (field !== 'keyringDiameter' && (keyringEditing || $('keyringPosition').value !== 'custom'))));
     const invalid = !ignored && (!Number.isFinite(input.valueAsNumber) || input.valueAsNumber < Number(input.min) || input.valueAsNumber > Number(input.max));
     input.setAttribute('aria-invalid', String(invalid)); error.hidden = !invalid;
     if (invalid) {
@@ -101,6 +102,7 @@ function setExportEnabled(enabled) {
   for (const button of exportButtons) button.disabled = !enabled;
   $('view-back-button').disabled = !viewer || !lastGoodResult;
   $('place-magnets').disabled = !viewer || !artwork || $('logoOnly').checked;
+  $('place-keyring').disabled = !viewer || !artwork;
 }
 function clearPreview(message = '上传一张 SVG，从平面开始。') {
   try { viewer?.clear(); } catch { /* Downloads remain independent of rendering. */ }
@@ -141,6 +143,7 @@ function generate() {
   $('puzzle-field').hidden = $('logoOnly').checked || $('shape').value !== 'puzzle';
   const { shapes, warnings, silhouette } = artwork;
   const params = parameters(); if (magnetEditing) params.magnetEnabled = false;
+  if (keyringEditing) params.keyringEnabled = false;
   worker.postMessage({ id: requestId, artwork: { shapes, warnings, silhouette }, params });
 }
 function schedule() {
@@ -171,7 +174,7 @@ worker.onmessage = ({ data }) => {
   renderMagnetPoints();
   $('preview-placeholder').hidden = !!viewer;
   if (!viewer) $('preview-placeholder').querySelector('p').textContent = '模型已生成，可以直接下载。';
-  status(magnetEditing ? 'loading' : 'ready', magnetEditing ? '正在选点' : '模型已生成');
+  status(magnetEditing || keyringEditing ? 'loading' : 'ready', magnetEditing || keyringEditing ? '正在选点' : '模型已生成');
   $('model-title').textContent = filename;
   const [x, y, z] = result.stats.dimensions;
   const reliefRange = result.stats.reliefHeightMax > result.stats.reliefHeight
@@ -181,6 +184,7 @@ worker.onmessage = ({ data }) => {
   if ($('logoOnly').checked || ['logo', 'hexagon'].includes($('shape').value)) $('height').value = y.toFixed(1);
   $('export-summary').textContent = `${result.stats.colorCount} 个图案色区 · ${result.stats.partCount} 个部件`;
   if (magnetEditing) $('export-summary').textContent = '选点完成后生成磁铁槽';
+  if (keyringEditing) { $('export-summary').textContent = '选点完成后生成钥匙扣孔'; renderKeyringPoint(); }
   $('export-detail').textContent = `${result.stats.mergedTriangleCount.toLocaleString()} 个三角面 · 已生成完整模型`;
   const magnets = result.stats.magnets;
   $('magnet-note').hidden = !magnets?.count;
@@ -194,7 +198,7 @@ worker.onmessage = ({ data }) => {
     swatch.title = color; swatch.setAttribute('aria-label', `颜色 ${color}`);
     $('palette').append(swatch);
   }
-  setExportEnabled(!magnetEditing);
+  setExportEnabled(!magnetEditing && !keyringEditing);
 };
 worker.onerror = () => {
   ++requestId; clearPreview('请刷新页面后重新上传。');
@@ -295,13 +299,14 @@ for (const button of document.querySelectorAll('.mode-button')) button.addEventL
   schedule();
 });
 $('reset-button').addEventListener('click', () => { for (const [field, value] of Object.entries(defaults)) $(field).value = value; standardHeight = defaults.height; magnetPoints = [[.5,.5]]; renderMagnetPoints(); needsCameraReset = true; generate(); });
-$('fit-button').addEventListener('click', () => { if (!magnetEditing) viewer?.fit(); });
-$('top-button').addEventListener('click', () => { if (!magnetEditing) viewer?.top(); });
-$('back-button').addEventListener('click', () => { if (!magnetEditing) viewer?.back(); });
-$('view-back-button').addEventListener('click', () => { if (!magnetEditing) viewer?.back(); });
+$('fit-button').addEventListener('click', () => { if (!magnetEditing && !keyringEditing) viewer?.fit(); });
+$('top-button').addEventListener('click', () => { if (!magnetEditing && !keyringEditing) viewer?.top(); });
+$('back-button').addEventListener('click', () => { if (!magnetEditing && !keyringEditing) viewer?.back(); });
+$('view-back-button').addEventListener('click', () => { if (!magnetEditing && !keyringEditing) viewer?.back(); });
 $('grid-button').addEventListener('click', () => { const enabled = viewer?.toggleGrid() ?? false; $('grid-button').setAttribute('aria-pressed', String(enabled)); });
 
 function renderMagnetPoints() {
+  if (keyringEditing) return;
   $('magnet-point-list').replaceChildren();
   magnetPoints.forEach((point, index) => {
     const row = document.createElement('li'), label = document.createElement('span'), remove = document.createElement('button');
@@ -316,15 +321,17 @@ function renderMagnetPoints() {
   viewer?.showMagnetPoints(magnetPoints, diameter);
 }
 function stopMagnetPicking() {
-  magnetEditing = false; viewer?.setPickMode(false);
+  magnetEditing = false; keyringEditing = false; viewer?.setPickMode(false);
   $('placement-banner').hidden = true;
   for (const id of ['fit-button','top-button','back-button']) $(id).disabled = false;
 }
 function startMagnetPicking() {
   if (!viewer || !artwork || $('logoOnly').checked) return;
+  stopMagnetPicking();
   if (magnetPoints.length===1 && magnetPoints[0][0]===.5 && magnetPoints[0][1]===.5 && !lastGoodResult?.stats.magnets?.count) magnetPoints=[];
   $('magnetEnabled').checked = true; syncShapeControls(); selectPanel('magnets');
   magnetEditing = true; $('placement-banner').hidden = false;
+  $('placement-banner').querySelector('span').textContent = '背面选点：点击底壳添加磁铁位置';
   for (const id of ['fit-button','top-button','back-button']) $(id).disabled = true;
   viewer.setPickMode(true, point => {
     if (!point) { feedback(['请选择底壳上的位置。'],true); return; }
@@ -335,6 +342,10 @@ function startMagnetPicking() {
 }
 $('place-magnets').addEventListener('click', startMagnetPicking);
 $('placement-done').addEventListener('click', () => {
+  if (keyringEditing) {
+    if (!keyringPickPoint) { feedback(['请在模型上选择孔中心。'],true); return; }
+    stopMagnetPicking(); generate(); return;
+  }
   if (!magnetPoints.length) { feedback(['请添加至少一个磁铁位置，或关闭磁铁槽。'],true); return; }
   stopMagnetPicking(); generate();
 });
@@ -343,6 +354,33 @@ $('clear-magnets').addEventListener('click', () => { magnetPoints=[]; renderMagn
 $('magnetDiameter').addEventListener('input', renderMagnetPoints);
 $('magnetEnabled').addEventListener('change', () => { if (!$('magnetEnabled').checked) { stopMagnetPicking(); generate(); } });
 renderMagnetPoints();
+
+function renderKeyringPoint() {
+  if (!keyringEditing) return;
+  const diameter = Math.max(1,Math.min(20,Number($('keyringDiameter').value)||4));
+  viewer?.showMagnetPoints(keyringPickPoint ? [keyringPickPoint] : [],diameter,true);
+}
+function startKeyringPicking() {
+  if (!viewer || !artwork) return;
+  stopMagnetPicking(); keyringPickPoint = null; keyringEditing = true;
+  $('keyringEnabled').checked = true; $('keyringPosition').value = 'custom';
+  syncShapeControls(); selectPanel('keyring');
+  $('placement-banner').hidden = false;
+  $('placement-banner').querySelector('span').textContent = '打孔选点：点击模型设置孔中心';
+  for (const id of ['fit-button','top-button','back-button']) $(id).disabled = true;
+  viewer.setPickMode(true, (point, coordinates) => {
+    if (!point) { feedback(['请在模型上选择孔中心。'],true); return; }
+    keyringPickPoint = point;
+    $('keyringX').value = coordinates[0].toFixed(3);
+    $('keyringY').value = coordinates[1].toFixed(3);
+    renderKeyringPoint(); feedback(['孔位置已选择，点击完成选点生成穿孔。']);
+  },true);
+  renderKeyringPoint(); generate();
+}
+$('place-keyring').addEventListener('click',startKeyringPicking);
+$('keyringDiameter').addEventListener('input',renderKeyringPoint);
+$('keyringEnabled').addEventListener('change',()=>{if (!$('keyringEnabled').checked && keyringEditing) {stopMagnetPicking();generate();}});
+$('keyringPosition').addEventListener('change',()=>{if(keyringEditing){stopMagnetPicking();generate();}});
 
 async function loadExample() {
   const token = beginUpload();
@@ -370,7 +408,7 @@ async function download(kind) {
     if (kind === 'scad') downloadFile(exportSCAD(exportParts, savedName), `${savedName}-${suffix}.scad`, 'text/plain;charset=utf-8');
     if (result === snapshot) status('ready', `${kind.toUpperCase()} 已导出`);
   } catch (error) { status('error', '导出失败'); feedback([error.message], true); }
-  finally { if (result) setExportEnabled(!magnetEditing); }
+  finally { if (result) setExportEnabled(!magnetEditing && !keyringEditing); }
 }
 for (const button of document.querySelectorAll('[data-export]')) button.addEventListener('click', () => download(button.dataset.export));
 function configNotice(message, error = false) {

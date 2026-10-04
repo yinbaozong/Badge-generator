@@ -24,7 +24,7 @@ export function createViewer(container) {
   const markers = new THREE.Group();
   markers.rotation.x = group.rotation.x;
   scene.add(markers);
-  let picking = false, pickCallback = null;
+  let picking = false, pickCallback = null, pickFront = false;
   const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
   let pointerStart = null;
   renderer.domElement.addEventListener('pointerdown', event => {
@@ -38,12 +38,12 @@ export function createViewer(container) {
     camera.updateMatrixWorld(); group.updateMatrixWorld(true);
     raycaster.setFromCamera(mouse, camera);
     const base = group.children.find(child => child.isMesh);
-    const hit = base && raycaster.intersectObject(base, false)[0];
+    const hit = pickFront ? raycaster.intersectObjects(group.children.filter(child=>child.isMesh),false)[0] : base && raycaster.intersectObject(base, false)[0];
     if (!hit) { pickCallback?.(null); return; }
     const local = group.worldToLocal(hit.point.clone());
     const u = (local.x-currentBox.min.x)/(currentBox.max.x-currentBox.min.x);
     const v = (local.y+currentBox.max.z)/(currentBox.max.z-currentBox.min.z);
-    pickCallback?.([Math.max(0,Math.min(1,u)), Math.max(0,Math.min(1,v))]);
+    pickCallback?.([Math.max(0,Math.min(1,u)), Math.max(0,Math.min(1,v))], [local.x,local.y]);
   });
   scene.add(new THREE.HemisphereLight(0xffffff, 0xc1c5cd, 1.1));
   scene.add(new THREE.AmbientLight(0xffffff, .25));
@@ -87,7 +87,7 @@ export function createViewer(container) {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    if (currentBox) fit(picking ? 'pick' : 'current');
+    if (currentBox) fit(picking ? (pickFront ? 'top' : 'pick') : 'current');
   }
   const observer = new ResizeObserver(resize);
   observer.observe(container);
@@ -157,7 +157,7 @@ export function createViewer(container) {
         group.add(object);
       }
       currentBox = new THREE.Box3().setFromObject(group);
-      if (picking) fit('pick');
+      if (picking) fit(pickFront ? 'top' : 'pick');
       else if (!hadModel || resetCamera) fit();
       else if (oldSize && oldSize.distanceTo(currentBox.getSize(new THREE.Vector3())) > .01) fit('current');
       container.classList.add('has-model');
@@ -165,24 +165,25 @@ export function createViewer(container) {
     fit: () => fit(),
     top: () => fit('top'),
     back: () => fit('back'),
-    setPickMode(enabled, callback) {
-      picking = enabled; pickCallback = callback;
+    setPickMode(enabled, callback, front = false) {
+      picking = enabled; pickCallback = callback; pickFront = front;
       controls.enableRotate = !enabled; controls.enablePan = !enabled;
       controls.enableDamping = !enabled;
       markers.visible = enabled;
       renderer.domElement.style.cursor = enabled ? 'crosshair' : '';
-      if (enabled) fit('pick');
+      if (enabled) fit(front ? 'top' : 'pick');
     },
-    showMagnetPoints(points, diameter) {
+    showMagnetPoints(points, diameter, front = false) {
       for (const child of [...markers.children]) { disposeObject(child); markers.remove(child); }
       if (!currentBox) return;
       points.forEach(([u, v], index) => {
         const x = currentBox.min.x + u*(currentBox.max.x-currentBox.min.x);
         const y = -currentBox.max.z + v*(currentBox.max.z-currentBox.min.z);
-        const radius = (diameter+.3)/2;
+        const radius = (diameter+(front?0:.3))/2;
+        const markerZ = front ? currentBox.max.y+.04 : -.04;
         const disk = new THREE.Mesh(new THREE.CircleGeometry(radius, 64),
           new THREE.MeshBasicMaterial({ color: 0x365eec, side: THREE.DoubleSide, transparent: true, opacity: .16, depthTest: false }));
-        disk.position.set(x, y, -.04); disk.renderOrder = 10;
+        disk.position.set(x, y, markerZ); disk.renderOrder = 10;
         const ring = new THREE.Mesh(new THREE.RingGeometry(radius*.98, radius*1.025, 64),
           new THREE.MeshBasicMaterial({ color: 0x365eec, side: THREE.DoubleSide, depthTest: false }));
         ring.position.copy(disk.position); ring.renderOrder = 11;
@@ -194,7 +195,7 @@ export function createViewer(container) {
           context.fillStyle = '#ffffff'; context.font = 'bold 32px sans-serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(String(index+1),32,34);
           const texture = new THREE.CanvasTexture(labelCanvas);
           const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
-          sprite.position.set(x,y,-.06); sprite.scale.set(Math.max(1.2,diameter*.32),Math.max(1.2,diameter*.32),1); sprite.renderOrder = 12;
+          sprite.position.set(x,y,markerZ+(front ? .02 : -.02)); sprite.scale.set(Math.max(1.2,diameter*.32),Math.max(1.2,diameter*.32),1); sprite.renderOrder = 12;
           markers.add(sprite);
         }
       });

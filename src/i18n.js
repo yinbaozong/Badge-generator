@@ -1,4 +1,11 @@
 const translations = {
+  '打孔': 'Hole',
+  '在模型上选孔位': 'Place hole on model',
+  '点击模型设置孔中心；再次点击可更换位置，完成后生成穿孔。': 'Click the model to set the hole center. Click again to move it, then finish placing to create the hole.',
+  '打孔选点：点击模型设置孔中心': 'Hole placement: click the model to set its center',
+  '请在模型上选择孔中心。': 'Choose a hole center on the model.',
+  '孔位置已选择，点击完成选点生成穿孔。': 'Hole position selected. Click Done placing to create the hole.',
+  '选点完成后生成钥匙扣孔': 'Finish placing to create the keyring hole',
   '钥匙扣打孔': 'Keyring hole',
   '启用钥匙扣孔': 'Enable keyring hole',
   '钥匙扣孔径': 'Hole diameter',

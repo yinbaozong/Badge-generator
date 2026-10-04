@@ -15,7 +15,7 @@
   </header>
   <main class="workspace">
     <aside class="inspector" aria-label="徽章设置">
-      <nav class="settings-tabs" role="tablist" aria-orientation="vertical" aria-label="设置分组"><button id="tab-artwork" type="button" role="tab" aria-selected="true" aria-controls="panel-artwork" data-panel="artwork">图案</button><button id="tab-dimensions" type="button" role="tab" aria-selected="false" aria-controls="panel-dimensions" data-panel="dimensions">尺寸</button><button id="tab-magnets" type="button" role="tab" aria-selected="false" aria-controls="panel-magnets" data-panel="magnets">磁铁</button></nav>
+      <nav class="settings-tabs" role="tablist" aria-orientation="vertical" aria-label="设置分组"><button id="tab-artwork" type="button" role="tab" aria-selected="true" aria-controls="panel-artwork" data-panel="artwork">图案</button><button id="tab-dimensions" type="button" role="tab" aria-selected="false" aria-controls="panel-dimensions" data-panel="dimensions">尺寸</button><button id="tab-magnets" type="button" role="tab" aria-selected="false" aria-controls="panel-magnets" data-panel="magnets">磁铁</button><button id="tab-keyring" type="button" role="tab" aria-selected="false" aria-controls="panel-keyring" data-panel="keyring">打孔</button></nav>
       <div class="settings-scroll">
       <section class="upload-section" id="panel-artwork" data-settings-panel="artwork" role="tabpanel" aria-labelledby="tab-artwork">
         <div class="section-heading"><h2>图案</h2><button class="text-button" id="example-button" type="button">使用示例</button></div>
@@ -66,12 +66,14 @@
         </div>
         <label class="field full" id="puzzle-field" hidden>拼图间隙<input id="puzzleClearance" type="number" value="0.2" min="0.05" max="0.6" step="0.05" /></label>
       </section>
-      <section class="control-section" data-settings-panel="dimensions" hidden>
+      <section class="control-section" id="panel-keyring" data-settings-panel="keyring" role="tabpanel" aria-labelledby="tab-keyring" hidden>
         <div class="section-heading"><h2>钥匙扣打孔</h2></div>
         <label class="magnet-toggle"><input id="keyringEnabled" type="checkbox" />启用钥匙扣孔</label>
         <div id="keyring-fields" hidden>
           <label class="field full">钥匙扣孔径<input id="keyringDiameter" type="number" value="4" min="1" max="20" step="0.1" /></label>
           <label class="field full">孔位置<select id="keyringPosition"><option value="auto">自动靠上</option><option value="custom">自定义坐标</option></select></label>
+          <button id="place-keyring" class="primary-button" type="button">在模型上选孔位</button>
+          <p class="field-note">点击模型设置孔中心；再次点击可更换位置，完成后生成穿孔。</p>
           <div class="field-row" id="keyring-custom" hidden><label class="field">孔中心 X<input id="keyringX" type="number" value="0" min="-300" max="300" step="0.5" /></label><label class="field">孔中心 Y<input id="keyringY" type="number" value="0" min="-300" max="300" step="0.5" /></label></div>
           <p class="field-note">穿透底壳和图案，孔边保留至少 1 mm。自定义坐标以模型中心为原点，X 向右、Y 向上。</p>
         </div>
