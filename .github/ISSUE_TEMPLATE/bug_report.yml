@@ -1,0 +1,28 @@
+name: Bug report / 问题反馈
+description: Report a problem with artwork, preview or export / 反馈上传、预览或导出问题
+title: "[Bug] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened? / 发生了什么？
+      description: Include what you expected and what you saw. / 描述预期与实际效果。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and settings / 操作步骤与设置
+      description: Include upload format, color mode, outline and sizes. / 附上文件格式、颜色模式、外形和尺寸。
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Artwork and screenshots / 原图与截图
+      description: Attach a sample you have permission to share. For SVG, use a text/code block or a link. / 附上可公开的素材；SVG 可贴代码或文件链接。
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device / 浏览器与设备
+      placeholder: Chrome 140, Windows 11

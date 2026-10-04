@@ -1,0 +1,9 @@
+Badge Generator
+Copyright (c) 2026 yinbaozong and Badge Generator contributors.
+Original source: https://github.com/yinbaozong/badge-generator
+Live app: https://yinbaozong.github.io/badge-generator/
+
+Licensed under the MIT License. Keep the copyright and license notice when
+redistributing source or substantial portions of this software.
+Please credit yinbaozong and link to the original project when sharing or
+republishing this tool. Third-party license notices are in licenses/.

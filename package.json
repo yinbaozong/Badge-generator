@@ -1,0 +1,26 @@
+{
+  "name": "svg-badge-generator",
+  "version": "0.1.0",
+  "private": true,
+  "author": "yinbaozong",
+  "homepage": "https://yinbaozong.github.io/badge-generator/",
+  "repository": { "type": "git", "url": "https://github.com/yinbaozong/badge-generator.git" },
+  "bugs": "https://github.com/yinbaozong/badge-generator/issues",
+  "type": "module",
+  "license": "MIT",
+  "description": "A static, local-first SVG to printable badge generator.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "fflate": "0.8.3",
+    "manifold-3d": "3.5.4",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "vite": "8.3.2"
+  },
+  "engines": { "node": ">=22.12" }
+}

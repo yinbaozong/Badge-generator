@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>Open badge example</title>
+  <path fill="#FF8D3A" d="M12 22 Q12 12 22 12 H58 Q68 12 68 22 V78 Q68 88 58 88 H22 Q12 88 12 78 Z"/>
+  <path fill="#365EEC" d="M58 22 H78 Q88 22 88 32 V68 Q88 78 78 78 H58 Z"/>
+  <path fill="#FFFFFF" d="M30 30 H47 L39 47 H53 L27 73 L35 54 H23 Z"/>
+</svg>
