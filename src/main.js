@@ -51,11 +51,12 @@ function validateFields() {
     const input = $(field), error = fieldErrors.get(field);
     const ignored = input.disabled || (field==='cornerRadius' && $('shape').value==='logo') ||
       (field==='puzzleClearance' && $('shape').value!=='puzzle') ||
-      (field.startsWith('magnet') && (!$('magnetEnabled').checked || $('logoOnly').checked));
+      (field.startsWith('magnet') && (!$('magnetEnabled').checked || $('logoOnly').checked)) ||
+      (field.startsWith('keyring') && (!$('keyringEnabled').checked || (field !== 'keyringDiameter' && $('keyringPosition').value !== 'custom')));
     const invalid = !ignored && (!Number.isFinite(input.valueAsNumber) || input.valueAsNumber < Number(input.min) || input.valueAsNumber > Number(input.max));
     input.setAttribute('aria-invalid', String(invalid)); error.hidden = !invalid;
     if (invalid) {
-      const label = {width:'徽章宽度',height:'徽章长度（Y）',baseThickness:'底座厚度',cornerRadius:'圆角',margin:'图案留边',reliefHeight:'图案凸起高度',puzzleClearance:'拼图间隙',magnetDiameter:'磁铁直径',magnetThickness:'磁铁厚度'}[field];
+      const label = {width:'徽章宽度',height:'徽章长度（Y）',baseThickness:'底座厚度',cornerRadius:'圆角',margin:'图案留边',reliefHeight:'图案凸起高度',puzzleClearance:'拼图间隙',magnetDiameter:'磁铁直径',magnetThickness:'磁铁厚度',keyringDiameter:'钥匙扣孔径',keyringX:'孔中心 X',keyringY:'孔中心 Y'}[field];
       // The field itself keeps a concise bilingual range even while typing.
       error.textContent = `${input.min}–${input.max} mm`;
       firstError ??= `${label}应在 ${input.min}～${input.max} 毫米之间。`;
@@ -78,6 +79,8 @@ function syncShapeControls() {
   $('puzzle-field').hidden = logoOnly || $('shape').value !== 'puzzle';
   $('magnet-fields').hidden = logoOnly || !$('magnetEnabled').checked;
   $('no-magnet-note').hidden = !logoOnly;
+  $('keyring-fields').hidden = !$('keyringEnabled').checked;
+  $('keyring-custom').hidden = $('keyringPosition').value !== 'custom';
   previousShape = $('shape').value;
   previousLogoOnly = logoOnly;
 }
@@ -119,6 +122,8 @@ function beginUpload() {
 }
 function parameters() {
   const values = { shape: $('shape').value, mode, backingEnabled:!$('logoOnly').checked, magnetEnabled: $('magnetEnabled').checked, magnetPoints: magnetPoints.map(p=>[...p]) };
+  values.keyringEnabled = $('keyringEnabled').checked;
+  values.keyringPosition = $('keyringPosition').value;
   for (const field of numericFields) values[field] = $('' + field).value === '' ? NaN : Number($(field).value);
   return values;
 }
@@ -275,7 +280,7 @@ $('svg-file').addEventListener('change', async event => {
 for (const event of ['dragenter', 'dragover']) $('drop-zone').addEventListener(event, e => { e.preventDefault(); $('drop-zone').classList.add('dragging'); });
 for (const event of ['dragleave', 'drop']) $('drop-zone').addEventListener(event, e => { e.preventDefault(); $('drop-zone').classList.remove('dragging'); });
 $('drop-zone').addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
-for (const field of [...numericFields, 'shape', 'magnetEnabled','logoOnly']) $(field).addEventListener('input', schedule);
+for (const field of [...numericFields, 'shape', 'magnetEnabled','logoOnly','keyringEnabled','keyringPosition']) $(field).addEventListener('input', schedule);
 $('logoOnly').addEventListener('change',()=>{if($('logoOnly').checked)stopMagnetPicking();generate();});
 function setMode(selectedMode) {
   mode = selectedMode;
@@ -393,6 +398,8 @@ $('config-file').addEventListener('change', async event => {
     $('shape').value = settings.shape; previousShape = settings.shape; standardHeight = settings.height;
     $('magnetEnabled').checked = settings.magnetEnabled; setMode(settings.mode);
     $('logoOnly').checked = !settings.backingEnabled; previousLogoOnly = $('logoOnly').checked;
+    $('keyringEnabled').checked = settings.keyringEnabled;
+    $('keyringPosition').value = settings.keyringPosition;
     stopMagnetPicking(); magnetPoints = settings.magnetPoints; renderMagnetPoints();
     needsCameraReset = true; syncShapeControls(); schedule();
     configNotice('配置已导入，当前图案将使用这套设置。');

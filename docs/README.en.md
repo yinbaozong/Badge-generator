@@ -47,8 +47,11 @@ A logo outline can produce separate backing islands. Increase the border or choo
 ## Dimensions
 
 - **Width X / Length Y** describe the backing. Length is automatic for hexagons and logo outlines.
-- **Backing thickness Z** is adjustable from 1.5 to 20 mm.
-- **Logo thickness Z** is the base relief thickness, adjustable from 0.2 to 20 mm. Multicolor regions add 0.2 mm steps.
+- **Width and length** are adjustable from 5 to 300 mm. Logo outlines and regular hexagons calculate length automatically.
+- **Backing thickness Z** is adjustable from 0.5 to 50 mm.
+- **Logo thickness Z** is the base relief thickness, adjustable from 0.2 to 50 mm. Multicolor regions add 0.2 mm steps.
+
+For a keychain, enable **Keyring hole** under **Dimensions**. The default hole diameter is 4 mm. Automatic placement finds space near the top; custom placement uses X/Y coordinates measured from the model center (X right, Y up). The hole cuts through backing and artwork and works in logo-only mode too. At least 1 mm of material must remain around it; if it does not fit, adjust the diameter or position. Hole settings are included in exported settings files.
 - **Border** controls the backing left around the artwork.
 
 The lower-right readout shows the finished dimensions, including total height. Changing width does not scale thickness. Invalid settings show an error above the preview. The previous valid preview may remain visible, but downloads stay disabled until the error is resolved.

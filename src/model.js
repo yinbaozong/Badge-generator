@@ -59,14 +59,19 @@ function readParameters(params) {
     backingEnabled,
     magnetEnabled,
     magnetPoints,
+    keyringEnabled: params.keyringEnabled === true,
+    keyringPosition: params.keyringPosition ?? 'auto',
+    keyringDiameter: params.keyringEnabled ? numberInRange(params.keyringDiameter ?? 4, 1, 20, '钥匙扣孔径') : 4,
+    keyringX: params.keyringEnabled && params.keyringPosition === 'custom' ? numberInRange(params.keyringX ?? 0,-300,300,'孔中心 X') : 0,
+    keyringY: params.keyringEnabled && params.keyringPosition === 'custom' ? numberInRange(params.keyringY ?? 0,-300,300,'孔中心 Y') : 0,
     magnetDiameter: magnetEnabled ? numberInRange(params.magnetDiameter ?? 6, 2, 30, '磁铁直径') : 6,
     magnetThickness: magnetEnabled ? numberInRange(params.magnetThickness ?? 2, 0.5, 10, '磁铁厚度') : 2,
-    width: numberInRange(params.width ?? 40, 15, 150, '徽章宽度'),
-    height: !backingEnabled || shape === 'logo' || shape === 'hexagon' ? 40 : numberInRange(params.height ?? 40, 15, 150, '徽章长度（Y）'),
-    baseThickness: backingEnabled ? numberInRange(params.baseThickness ?? 3, 1.5, 20, '底座厚度') : 0,
-    cornerRadius: !backingEnabled || shape === 'logo' ? 0 : numberInRange(params.cornerRadius ?? 3, 0, 15, '圆角'),
-    margin: backingEnabled ? numberInRange(params.margin ?? 4, 0.5, 20, '图案留边') : 0,
-    reliefHeight: numberInRange(params.reliefHeight ?? 1, 0.2, 20, '图案凸起高度'),
+    width: numberInRange(params.width ?? 40, 5, 300, '徽章宽度'),
+    height: !backingEnabled || shape === 'logo' || shape === 'hexagon' ? 40 : numberInRange(params.height ?? 40, 5, 300, '徽章长度（Y）'),
+    baseThickness: backingEnabled ? numberInRange(params.baseThickness ?? 3, 0.5, 50, '底座厚度') : 0,
+    cornerRadius: !backingEnabled || shape === 'logo' ? 0 : numberInRange(params.cornerRadius ?? 3, 0, 50, '圆角'),
+    margin: backingEnabled ? numberInRange(params.margin ?? 4, 0.1, 50, '图案留边') : 0,
+    reliefHeight: numberInRange(params.reliefHeight ?? 1, 0.2, 50, '图案凸起高度'),
     puzzleClearance: backingEnabled && shape === 'puzzle' ? numberInRange(params.puzzleClearance ?? 0.2, 0.05, 0.6, '拼图间隙') : 0.2,
   };
   if (shape === 'hexagon') values.height = values.width * Math.sqrt(3) / 2;
@@ -172,6 +177,29 @@ export async function buildBadge(artwork, params = {}) {
   const { CrossSection, Manifold } = await initializeModeler();
   const owned = new Set();
   const keep = (object) => { owned.add(object); return object; };
+  const keyringHole = support => {
+    if (!options.keyringEnabled) return null;
+    if (!['auto','custom'].includes(options.keyringPosition)) throw new Error('钥匙扣位置选项无效。');
+    const radius = options.keyringDiameter / 2;
+    let point = [options.keyringX, options.keyringY];
+    if (options.keyringPosition === 'auto') {
+      // Erode the actual material footprint, including its internal holes.
+      // Its uppermost point provides clearance even on a concave logo.
+      const inner = keep(support.offset(-radius-1.2, 'Round', 2, SEGMENTS));
+      if (inner.isEmpty()) throw new Error('图案太窄，放不下钥匙扣孔，请减小孔径或增大尺寸。');
+      const polygons = inner.toPolygons(), points = polygons.flat();
+      for (const polygon of polygons) for (let i=0;i<polygon.length;i++) {
+        const a=polygon[i], b=polygon[(i+1)%polygon.length];
+        const t=b[0]===a[0] ? 0.5 : Math.max(0,Math.min(1,-a[0]/(b[0]-a[0])));
+        points.push([a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1])]);
+      }
+      points.sort((a,b)=>b[1]-a[1] || Math.abs(a[0])-Math.abs(b[0]));
+      point = points[0];
+    }
+    const wall = keep(keep(CrossSection.circle(radius+1,SEGMENTS)).translate(point));
+    if (keep(wall.subtract(support)).area()>AREA_EPSILON) throw new Error('钥匙扣孔超出图案或距离边缘不足 1 mm，请调整孔位置或减小孔径。');
+    return keep(keep(CrossSection.circle(radius,SEGMENTS)).translate(point));
+  };
   // The 3.5.4 JavaScript polygon adapter reads contours[0].length, so an empty
   // polygon array cannot be passed to its constructor. A zero-size square is
   // the documented native empty constructor and bypasses that adapter.
@@ -240,7 +268,9 @@ export async function buildBadge(artwork, params = {}) {
       const span = box.max[0]-box.min[0];
       if (span<=0) throw new Error('SVG 图案的宽度或高度为零。');
       const center = [(box.min[0]+box.max[0])/2,(box.min[1]+box.max[1])/2];
-      const regions = colorRegions.map(({color,section})=>({color,section:keep(keep(section.translate(center.map(v=>-v))).scale(options.width/span))}));
+      let regions = colorRegions.map(({color,section})=>({color,section:keep(keep(section.translate(center.map(v=>-v))).scale(options.width/span))}));
+      const hole = keyringHole(unionSections(regions.map(({section})=>section)));
+      if (hole) regions = regions.map(({color,section})=>({color,section:keep(section.subtract(hole))})).filter(({section})=>!section.isEmpty() && section.area()>AREA_EPSILON);
       const solids = regions.map(({color,section},index)=>({
         color,name:options.mode==='single'?'黑色图案':`图案 ${index+1} ${color}`,
         solid:keep(section.extrude(options.reliefHeight+(options.mode==='multi'?index*COLOR_STEP:0))),
@@ -271,7 +301,7 @@ export async function buildBadge(artwork, params = {}) {
       ? Math.max(options.margin, puzzleDepth + options.puzzleClearance + 1)
       : options.margin;
     const fitBox = [options.width - 2 * effectiveMargin, options.height - 2 * effectiveMargin];
-    if (fitBox[0] < 5 || (options.shape !== 'logo' && fitBox[1] < 5)) {
+    if (fitBox[0] < 0.1 || (options.shape !== 'logo' && fitBox[1] < 0.1)) {
       throw new Error('图案留边太大，图案已经放不下：请减小留边或增大徽章。');
     }
 
@@ -378,6 +408,14 @@ export async function buildBadge(artwork, params = {}) {
     colorRegions = colorRegions.map(({ color, section }) => ({ color, section: keep(section.intersect(outline)) }))
       .filter(({ section }) => !section.isEmpty() && section.area() > AREA_EPSILON);
     if (colorRegions.length === 0) throw new Error('图案没有落在底座内，请调整图案留边。');
+
+    // Cut the same through-hole from both the backing and all artwork layers.
+    const hole = keyringHole(outline);
+    if (hole) {
+      outline = keep(outline.subtract(hole));
+      colorRegions = colorRegions.map(({color,section})=>({color,section:keep(section.subtract(hole))})).filter(({section})=>!section.isEmpty() && section.area()>AREA_EPSILON);
+      if (!colorRegions.length) throw new Error('钥匙扣孔移除了全部图案，请调整孔位置或减小孔径。');
+    }
 
     const magnetDiameter = options.magnetDiameter, magnetThickness = options.magnetThickness;
     const magnetCount = options.magnetEnabled ? options.magnetPoints.length : 0;
