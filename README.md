@@ -2,7 +2,7 @@
 
 # 徽章生成器
 
-[在线使用](https://yinbaozong.github.io/badge-generator/) · [English guide](docs/README.en.md) · [反馈问题](https://github.com/yinbaozong/badge-generator/issues)
+[在线使用](https://yinbaozong.github.io/Badge-generator/) · [English guide](docs/README.en.md) · [反馈问题](https://github.com/yinbaozong/Badge-generator/issues)
 
 上传一张图，调好尺寸，就可以下载打印用的徽章。支持 SVG，也可以试试 PNG / JPG。图片处理和模型生成都在浏览器里完成，不会上传你的文件。
 
