@@ -2,7 +2,7 @@
 
 # Badge Generator
 
-[Open the app](https://yinbaozong.github.io/badge-generator/) · [中文说明](../README.md) · [Report an issue](https://github.com/yinbaozong/badge-generator/issues)
+[Open the app](https://yinbaozong.github.io/Badge-generator/) · [中文说明](../README.md) · [Report an issue](https://github.com/yinbaozong/Badge-generator/issues)
 
 Upload artwork, set the dimensions, and download a printable badge. SVG is the preferred format; PNG and JPG tracing is also available as an experimental feature. Files are processed in your browser and are not uploaded.
 
