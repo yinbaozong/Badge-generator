@@ -1,4 +1,5 @@
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+import { Vector2 } from 'three';
 
 const MAX_FILE = 5 * 1024 * 1024;
 const MAX_POINTS = 200000;
@@ -131,6 +132,44 @@ function flatten(subpath, tolerance, budget) {
   return points;
 }
 
+function visiblePaint(style, property) {
+  const paint = style[property] || (property === 'fill' ? '#000000' : 'none');
+  return paint !== 'none' && (style[`${property}Opacity`] ?? 1) > 0 &&
+    (style.opacity ?? 1) > 0 &&
+    (property !== 'stroke' || style.strokeWidth > 0) &&
+    (/^url\s*\(/i.test(paint) || colorChannels(paint)[3] > 0);
+}
+
+// Expand strokes in the original SVG coordinate system, then transform back.
+// Expanding already-transformed centerlines would distort non-uniform scales.
+function strokeContours(path, tolerance, budget) {
+  const transform = path.userData.transform;
+  const determinant = transform.determinant();
+  if (Math.abs(determinant) < 1e-15) return [];
+  const inverse = transform.clone().invert();
+  const style = { ...path.userData.style, strokeWidth: path.userData.style.strokeWidth / Math.sqrt(Math.abs(determinant)) };
+  const contours = [];
+  for (const subpath of path.subPaths) {
+    const flattened = flatten(subpath, tolerance, budget);
+    if (flattened.length < 2) continue;
+    const points = flattened.map(([x, y]) => new Vector2(x, y).applyMatrix3(inverse));
+    const first = subpath.curves[0].getPoint(0), last = subpath.curves.at(-1).getPoint(1);
+    if (subpath.autoClose || first.distanceTo(last) < tolerance * .001) points.push(points[0].clone());
+    const vertices = [];
+    SVGLoader.pointsToStrokeWithBuffers(points, style, 24, 1e-10, vertices, [], []);
+    for (let i = 0; i < vertices.length; i += 9) {
+      const triangle = [0, 3, 6].map(offset => new Vector2(vertices[i + offset], vertices[i + offset + 1]).applyMatrix3(transform).toArray());
+      const [a, b, c] = triangle;
+      const area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      if (Math.abs(area) < 1e-15) continue;
+      if (area < 0) triangle.reverse();
+      if ((budget.points += 3) > MAX_POINTS) throw new Error('SVG 细节过多，请减少节点后上传。');
+      contours.push(triangle);
+    }
+  }
+  return contours;
+}
+
 export function parseArtwork(text) {
   colorCache.clear();
   const document = validateDocument(text);
@@ -138,13 +177,8 @@ export function parseArtwork(text) {
   const loaded = new SVGLoader().parse(safeText);
   const visible = loaded.paths.filter(path => {
     const style = path.userData.style;
-    if (style.fill === 'none') {
-      if (style.stroke && style.stroke !== 'none' && (style.strokeOpacity ?? 1) > 0) throw new Error('SVG 包含描边，请先将描边转换为填色路径。');
-      return false;
-    }
     if (['hidden', 'collapse'].includes(style.visibility)) return false;
-    if (!/^url\s*\(/i.test(style.fill || '') && colorChannels(style.fill || '#000000')[3] === 0) return false;
-    return (style.fillOpacity ?? 1) > 0 && (style.opacity ?? 1) > 0;
+    return visiblePaint(style, 'fill') || visiblePaint(style, 'stroke');
   });
   if (!visible.length) throw new Error('SVG 没有可生成的填色路径。');
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -156,9 +190,8 @@ export function parseArtwork(text) {
   const tolerance = roughSpan * .00015;
   const warnings = new Set();
   const budget = { points: 0 };
-  const shapes = visible.map(path => {
-    const style = path.userData.style;
-    const fill = style.fill || '#000000';
+  function paintColor(style, property) {
+    const fill = style[property] || '#000000';
     const reference = /^url\(\s*['"]?#([^)'"\s]+)['"]?\s*\)$/.exec(fill);
     let color;
     if (reference) {
@@ -167,10 +200,19 @@ export function parseArtwork(text) {
     } else {
       color = '#' + colorChannels(fill).slice(0, 3).map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
     }
-    const opacity = (style.opacity ?? 1) * (style.fillOpacity ?? 1);
+    const opacity = (style.opacity ?? 1) * (style[`${property}Opacity`] ?? 1);
     if (opacity < 1 || (!reference && colorChannels(fill)[3] < 1)) warnings.add('半透明填色按不透明实色生成。');
-    if (style.stroke && style.stroke !== 'none' && style.strokeWidth > 0) throw new Error('SVG 同时包含填色和描边，请先将描边展开为填色路径。');
-    return { color, fillRule: style.fillRule === 'evenodd' ? 'EvenOdd' : 'NonZero', contours: path.subPaths.map(p => flatten(p, tolerance, budget)).filter(p => p.length >= 3) };
+    return color;
+  }
+  const shapes = visible.flatMap(path => {
+    const style = path.userData.style;
+    const paints = [];
+    if (visiblePaint(style, 'fill')) paints.push({ color: paintColor(style, 'fill'), fillRule: style.fillRule === 'evenodd' ? 'EvenOdd' : 'NonZero', contours: path.subPaths.map(p => flatten(p, tolerance, budget)).filter(p => p.length >= 3) });
+    if (visiblePaint(style, 'stroke')) {
+      paints.push({ color: paintColor(style, 'stroke'), fillRule: 'NonZero', contours: strokeContours(path, tolerance, budget) });
+      warnings.add('SVG 描边已自动转换为可打印的实色轮廓。');
+    }
+    return paints;
   }).filter(shape => shape.contours.length);
   if (!shapes.length) throw new Error('SVG 没有可生成的闭合区域。');
   x0 = Infinity; y0 = Infinity; x1 = -Infinity; y1 = -Infinity;

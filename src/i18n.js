@@ -145,6 +145,7 @@ const translations = {
   'SVG 没有可生成的填色路径。': 'SVG contains no usable filled paths.',
   'SVG 图案没有有效尺寸。': 'SVG artwork has no valid dimensions.',
   'SVG 同时包含填色和描边，请先将描边展开为填色路径。': 'SVG contains fills and strokes. Expand strokes into filled paths.',
+  'SVG 描边已自动转换为可打印的实色轮廓。': 'SVG strokes were automatically converted to printable solid outlines.',
   'SVG 没有可生成的闭合区域。': 'SVG contains no usable closed regions.',
   'SVG 图案没有有效面积。': 'SVG artwork has no valid area.',
   '徽章外形选项无效。': 'Invalid badge shape.', '请选择单色或多色。': 'Choose single-color or multicolor mode.',

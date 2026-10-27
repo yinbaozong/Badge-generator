@@ -86,7 +86,7 @@ Best results come from clear icons with transparent or solid backgrounds. Photos
 
 Small images and screenshots may still show rough edges when enlarged. Smoothing cannot recover missing source detail. Use an original SVG where possible, or try [PNG to SVG](https://pngtosvg.com/) and upload the result. This is an external tool; this project does not send it your files.
 
-For SVGs, use closed filled paths. Convert text and strokes to paths first. Masks, filters and embedded images are not supported.
+For SVGs, use closed filled paths where possible. Ordinary solid strokes are automatically converted to printable outlines, preserving their color, width and caps. Convert text to paths first. Masks, filters and embedded images are not supported; expand complex stroke effects into filled paths before importing.
 
 ## Finding SVG artwork
 
@@ -94,7 +94,7 @@ For SVGs, use closed filled paths. Convert text and strokes to paths first. Mask
 - [SVGL](https://svgl.app/) for software, developer tools and AI brand logos.
 - [Simple Icons](https://simpleicons.org/) for monochrome brand icons.
 
-Download an SVG, then use **Upload SVG**. Some files may need text, strokes or masks converted to plain filled paths. Follow the applicable brand rules; this project's MIT license does not license third-party brand marks.
+Download an SVG, then use **Upload SVG**. Some files may need text, complex stroke effects or masks converted to plain filled paths. Follow the applicable brand rules; this project's MIT license does not license third-party brand marks.
 
 ## Feedback and sharing
 
