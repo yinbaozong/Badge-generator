@@ -74,4 +74,13 @@ await check('Closed stroke-only ring builds a printable model with its center op
   }
   assert([...edges.values()].every(count => count === 2), 'Stroke mesh is not watertight');
 });
+await check('Repeated backing offsets clean redundant vertices without changing size or colors', async () => {
+  const artwork = parseArtwork(svg('<path d="M10 10H45V70H10Z" fill="red" stroke="red" stroke-width="0.25" stroke-linejoin="round"/><path d="M55 20H90V65H55Z" fill="blue" stroke="blue" stroke-width="0.25" stroke-linejoin="round"/>'));
+  const start = performance.now();
+  const result = await buildBadge(artwork, { shape:'logo', width:40, margin:4, mode:'multi' });
+  assert(performance.now()-start < 5000, 'Small logo outline exceeded 5 second budget');
+  assert(Math.abs(result.stats.dimensions[0]-40) < .01, 'Final backing width changed');
+  assert(result.parts.some(p=>p.color==='#FF0000') && result.parts.some(p=>p.color==='#0000FF'), 'Artwork color was lost');
+  assert(result.stats.mergedTriangleCount < 5000, 'Redundant offset vertices inflated the mesh');
+});
 document.getElementById('results').textContent = JSON.stringify({ passed: checks.filter(c => c.passed).length, total: checks.length, checks }, null, 2);

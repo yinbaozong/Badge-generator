@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>SVG model timing checks</title>
+<input id="file" type="file" accept=".svg"><pre id="results">Choose an SVG to compare rectangle and logo-outline generation.</pre>
+<script type="module">
+import { parseArtwork } from '../src/svg.js';
+const output = document.querySelector('#results');
+document.querySelector('#file').onchange = async event => {
+  const start = performance.now();
+  const artwork = parseArtwork(await event.target.files[0].text());
+  output.textContent = JSON.stringify({parseMs: performance.now()-start, points: artwork.pointCount, shapes:artwork.shapes.map(s=>({color:s.color,contours:s.contours.length,points:s.contours.reduce((n,c)=>n+c.length,0)}))},null,2);
+  for (const shape of ['rect','logo']) {
+    const worker = new Worker(new URL('./svg-performance-worker.js',import.meta.url),{type:'module'});
+    await new Promise(resolve => {
+      const timeout = setTimeout(()=>{output.textContent += `\n${shape}: TIMED OUT after 40 seconds`;worker.terminate();resolve();},40000);
+      worker.onmessage = ({data}) => {
+        output.textContent += '\n'+JSON.stringify(data);
+        if(data.done && !data.error) output.textContent += `\n${shape}: ${data.ms < 5000 ? 'PASS' : 'FAIL'} (generation budget: 5 seconds)`;
+        if(data.done){clearTimeout(timeout);worker.terminate();resolve();}
+      };
+      worker.postMessage({artwork,shape});
+    });
+  }
+};
+</script>

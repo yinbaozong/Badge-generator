@@ -225,7 +225,9 @@ export async function buildBadge(artwork, params = {}) {
       const contours = validatedContours(shape.contours, pointCounter);
       if (contours.length === 0) continue;
       const fillRule = shape.fillRule === 'EvenOdd' ? 'EvenOdd' : 'NonZero';
-      let section = keep(new CrossSection(contours, fillRule));
+      // Stroke meshes contain many nearly collinear join vertices. Remove only
+      // sub-micron-scale noise in normalized SVG coordinates before booleans.
+      let section = keep(keep(new CrossSection(contours, fillRule)).simplify(0.001));
       if (rasterMask) section = keep(section.intersect(rasterMask));
       if (section.isEmpty()) continue;
       if (color !== '#FFFFFF') coloredSources.push(section);
@@ -327,17 +329,21 @@ export async function buildBadge(artwork, params = {}) {
         keep(component);
         return component.toPolygons().sort((a, b) => Math.abs(signedArea(b)) - Math.abs(signedArea(a)))[0];
       }).filter(Boolean);
-      const profile = keep(keep(new CrossSection(outers, 'NonZero')).translate([-center[0], -center[1]]));
+      const profile = keep(keep(keep(new CrossSection(outers, 'NonZero')).simplify(0.001)).translate([-center[0], -center[1]]));
+      // Offset adds tiny edges which become expensive when offset again. Keep
+      // the backing within 0.005 mm while cleaning after EACH offset operation.
+      const outlineTolerance = Math.min(0.005, options.margin / 100);
+      const cleanOffset = (section, distance) => keep(keep(section.offset(distance, 'Round', 2, SEGMENTS)).simplify(outlineTolerance));
       scale = (options.width - 2 * options.margin) / spanX;
       // Fit FINAL backing width, including the border. Uniform XY scale only;
       // the hidden Y input never limits a logo's requested width.
       for (let i = 0; i < 3; i += 1) {
         if (!Number.isFinite(scale) || scale <= 0) throw new Error('图案留边太大，图案已经放不下：请减小留边或增大徽章。');
-        const expanded = keep(keep(profile.scale(scale)).offset(options.margin, 'Round', 2, SEGMENTS));
+        const expanded = cleanOffset(keep(profile.scale(scale)), options.margin);
         // A small closing radius softens concave notches without shrinking the
         // support under the artwork; uniform width fitting still runs afterward.
         const softRadius = Math.min(0.35, options.margin / 3);
-        logoOutline = keep(keep(expanded.offset(softRadius, 'Round', 2, SEGMENTS)).offset(-softRadius, 'Round', 2, SEGMENTS));
+        logoOutline = cleanOffset(cleanOffset(expanded, softRadius), -softRadius);
         const box = logoOutline.bounds();
         const correction = (options.width - (box.max[0] - box.min[0])) / spanX;
         if (Math.abs(correction * spanX) < 0.0001) break;
